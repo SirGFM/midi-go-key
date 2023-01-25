@@ -52,6 +52,21 @@ type KeyEvents interface {
 		threshold uint8,
 		quickPressDuration time.Duration,
 	)
+
+	// RegisterHoldAction registers an actions that stays pressed
+	// as long as the MIDI event is repeated.
+	// If the MIDI event hasn't been sent in maxRepeatDelayMs,
+	// then the key will be released after shortRelease.
+	// Otherwise, it will stay pressed for maxRepeatDelayMs
+	// of the last event.
+	RegisterHoldAction(
+		evType midi.MidiEventType,
+		channel,
+		key uint8,
+		keyCode int,
+		maxRepeatDelayMs int32,
+		shortRelease time.Duration,
+	)
 }
 
 // A MIDI event generated for a given note,
@@ -310,6 +325,55 @@ func (kbEv *keyEvents) RegisterToggleAction(
 		kbEv.kb.SetKeys(keyCode)
 		kbEv.kb.Release()
 		isPressed = false
+	}
+
+	kbEv.actions[event] = handler
+}
+
+func (kbEv *keyEvents) RegisterHoldAction(
+	evType midi.MidiEventType,
+	channel,
+	key uint8,
+	keyCode int,
+	maxRepeatDelayMs int32,
+	shortRelease time.Duration,
+) {
+	event := generateNoteEvent(evType, channel, key)
+
+	kbEv.removeAction(event)
+
+	// Create a new action handler and start its timer.
+	handler := newMidiAction()
+
+	// Stores the last time the MIDI event was received.
+	var lastTimestamp int32
+
+	// Register the onPress function.
+	handler.action = func(ev midi.MidiEvent) {
+		if ev.Type != midi.EventNoteOn || ev.Velocity == 0 {
+			return
+		}
+
+		kbEv.kb.SetKeys(keyCode)
+		kbEv.kb.Press()
+
+		// If the event was sent quickly enough,
+		// requeue the action for a longer time.
+		// Otherwise, simply send a quick action.
+		if ev.Timestamp - lastTimestamp > maxRepeatDelayMs {
+			handler.QueueTimedAction(shortRelease)
+		} else {
+			handler.QueueTimedAction(time.Duration(maxRepeatDelayMs) * time.Millisecond)
+		}
+
+		lastTimestamp = ev.Timestamp
+	}
+
+	// Register the onRelease function,
+	// automatically queued after releaseTime from the press.
+	handler.onTimeout = func() {
+		kbEv.kb.SetKeys(keyCode)
+		kbEv.kb.Release()
 	}
 
 	kbEv.actions[event] = handler
