@@ -33,6 +33,13 @@ func newMidiAction() *midiAction {
 	return handler
 }
 
+// UnqueueTimedAction releases the timeout from an action.
+func (ma *midiAction) UnqueueTimedAction() {
+	ma.mutex.Lock()
+	ma.timer.Stop()
+	ma.mutex.Unlock()
+}
+
 // QueueTimedAction queues an actions to be taken after timeout.
 func (ma *midiAction) QueueTimedAction(timeout time.Duration) {
 	ma.mutex.Lock()

@@ -38,6 +38,20 @@ type KeyEvents interface {
 		minPress,
 		maxPress time.Duration,
 	)
+
+	// RegisterToggleAction registers an action that toggles a key whenever
+	// the MIDI event is generated.
+	// To send quick presses, set a velocity threshold,
+	// bellow which the action will be executed regularly, instead of toggling.
+	// This also causes the toggle to get released, if it were pressed.
+	RegisterToggleAction(
+		evType midi.MidiEventType,
+		channel,
+		key uint8,
+		keyCode int,
+		threshold uint8,
+		quickPressDuration time.Duration,
+	)
 }
 
 // A MIDI event generated for a given note,
@@ -235,6 +249,63 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 
 	// Register the onRelease function,
 	// automatically queued after releaseTime from the press.
+	handler.onTimeout = func() {
+		kbEv.kb.SetKeys(keyCode)
+		kbEv.kb.Release()
+		isPressed = false
+	}
+
+	kbEv.actions[event] = handler
+}
+
+func (kbEv *keyEvents) RegisterToggleAction(
+	evType midi.MidiEventType,
+	channel,
+	key uint8,
+	keyCode int,
+	threshold uint8,
+	quickPressDuration time.Duration,
+) {
+	event := generateNoteEvent(evType, channel, key)
+
+	kbEv.removeAction(event)
+
+	// Create a new action handler and start its timer.
+	handler := newMidiAction()
+
+	// Stores the key state between the functions.
+	isPressed := false
+
+	// Register the onPress function.
+	handler.action = func(ev midi.MidiEvent) {
+		if ev.Type != midi.EventNoteOn || ev.Velocity == 0 {
+			return
+		}
+
+		if isPressed {
+			// If it is pressed, simply release it.
+			kbEv.kb.SetKeys(keyCode)
+			kbEv.kb.Release()
+
+			isPressed = false
+			handler.UnqueueTimedAction()
+		} else {
+			// Otherwise, simply toggle it on.
+			kbEv.kb.SetKeys(keyCode)
+			kbEv.kb.Press()
+
+			isPressed = true
+
+			// If the hit was bellow the threshold,
+			// simply do a quick press.
+			if ev.Velocity < threshold {
+				handler.QueueTimedAction(quickPressDuration)
+			}
+		}
+	}
+
+	// Register the onRelease function,
+	// automatically queued after releaseTime from a press bellow the threshold.
 	handler.onTimeout = func() {
 		kbEv.kb.SetKeys(keyCode)
 		kbEv.kb.Release()

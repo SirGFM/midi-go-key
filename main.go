@@ -57,6 +57,8 @@ func main() {
 	kb.RegisterBasicPressAction(midi.EventNoteOn, 9, 41, 30, time.Second)
 	// Press 'B' after a tom3
 	kb.RegisterVelocityAction(midi.EventNoteOn, 9, 43, 48, time.Millisecond * 10, time.Second)
+	// Press 'C' after a hi-hat
+	kb.RegisterToggleAction(midi.EventNoteOn, 9, 44, 46, 75, time.Millisecond * 10)
 
 	midiDev, err := midi.NewMidi(*port, conn)
 	if err != nil {
