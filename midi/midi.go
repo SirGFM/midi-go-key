@@ -11,6 +11,9 @@ import (
 	_ "gitlab.com/gomidi/midi/v2/drivers/midicatdrv"
 )
 
+// The maximum velocity reported by the driver for any given MIDI event.
+const MaxVelocity = 128
+
 type Midi interface {
 	// Close releases resources associated with this device.
 	Close() error

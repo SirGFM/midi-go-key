@@ -26,6 +26,18 @@ type KeyEvents interface {
 		keyCode int,
 		releaseTime time.Duration,
 	)
+
+	// RegisterVelocityAction registers the action of pressing a key
+	// based on the velocity of the MIDI event.
+	// The greater the velocity, the closer to maxPress that the key is held down.
+	RegisterVelocityAction(
+		evType midi.MidiEventType,
+		channel,
+		key uint8,
+		keyCode int,
+		minPress,
+		maxPress time.Duration,
+	)
 }
 
 // A MIDI event generated for a given note,
@@ -157,6 +169,76 @@ func (kbEv *keyEvents) RegisterBasicPressAction(
 	handler.onTimeout = func() {
 		kbEv.kb.SetKeys(keyCode)
 		kbEv.kb.Release()
+	}
+
+	kbEv.actions[event] = handler
+}
+
+//	- ex: hit drum pedal -> press up key based on the velocity
+func (kbEv *keyEvents) RegisterVelocityAction(
+	evType midi.MidiEventType,
+	channel,
+	key uint8,
+	keyCode int,
+	minPress,
+	maxPress time.Duration,
+) {
+	event := generateNoteEvent(evType, channel, key)
+
+	kbEv.removeAction(event)
+
+	// Create a new action handler and start its timer.
+	handler := newMidiAction()
+
+	// Stores the key state between the functions.
+	isPressed := false
+
+	// Register the onPress function.
+	handler.action = func(ev midi.MidiEvent) {
+		if ev.Type != midi.EventNoteOn || ev.Velocity == 0 {
+			return
+		}
+
+		if ev.Velocity > midi.MaxVelocity {
+			fmt.Printf("max velocity was reached! %d\n", ev.Velocity)
+		}
+
+		// Calculate how long the key should be pressed based on the key velocity.
+		releaseTime := maxPress - minPress
+		releaseTime *= time.Duration(ev.Velocity)
+		releaseTime /= midi.MaxVelocity
+		releaseTime += minPress
+
+		onPress := func() {
+			kbEv.kb.SetKeys(keyCode)
+			kbEv.kb.Press()
+
+			isPressed = true
+
+			handler.QueueTimedAction(releaseTime)
+		}
+
+		if isPressed {
+			// If the key was already pressed,
+			// release it momentarily and then press it again.
+			kbEv.kb.SetKeys(keyCode)
+			kbEv.kb.Release()
+
+			go func() {
+				time.Sleep(time.Millisecond)
+				onPress()
+			}()
+		} else {
+			onPress()
+		}
+	}
+
+	// Register the onRelease function,
+	// automatically queued after releaseTime from the press.
+	handler.onTimeout = func() {
+		kbEv.kb.SetKeys(keyCode)
+		kbEv.kb.Release()
+		isPressed = false
 	}
 
 	kbEv.actions[event] = handler
