@@ -6,7 +6,10 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/SirGFM/midi-go-key/key_events"
 	"github.com/SirGFM/midi-go-key/midi"
+
+	"time"
 )
 
 // How many events may be queued
@@ -44,19 +47,23 @@ func main() {
 	}
 
 	conn := make(chan midi.MidiEvent, *eventQueueSize)
+	kb, err := key_events.NewKeyEvents(conn)
+	if err != nil {
+		panic(fmt.Sprintf("%+v", err))
+	}
+	defer kb.Close()
+
+	// Press 'A' after a tom4.
+	kb.RegisterBasicPressAction(midi.EventNoteOn, 9, 41, 30, time.Second)
+
 	midiDev, err := midi.NewMidi(*port, conn)
 	if err != nil {
 		panic(fmt.Sprintf("%+v", err))
 	}
 	defer midiDev.Close()
 
-	// XXX: For testing purposes, log the events.
-	fmt.Println("Listening to device...")
-	for ev := range conn {
-		fmt.Printf("%s\n", ev.String())
-	}
-
 	// Register a signal handler, so the application may sleep until it's done.
+	fmt.Println("Listening to device...")
 	intHndlr := make(chan os.Signal, 1)
 	signal.Notify(intHndlr, os.Interrupt)
 	<-intHndlr

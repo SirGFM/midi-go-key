@@ -47,6 +47,20 @@ func (evType MidiEventType) String() string {
 	}
 }
 
+// Convert the MIDI event to its byte representation.
+func (evType MidiEventType) ToUint8() uint8 {
+	switch evType {
+	case EventUnknown:
+		return 0x00
+	case EventNoteOn:
+		return 0x90
+	case EventNoteOff:
+		return 0x80
+	default:
+		return 0x00
+	}
+}
+
 // A MIDI event.
 type MidiEvent struct {
 	// The original MIDI message.
