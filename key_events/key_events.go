@@ -28,37 +28,43 @@ type KeyEvents interface {
 
 	// RegisterBasicPressAction registers the most basic action of pressing and
 	// shortly thereafter (after releaseTime) releasing it.
+	// The input is ignored if it's less than or equal to the threshold.
 	RegisterBasicPressAction(
 		evType midi.MidiEventType,
 		channel,
 		key uint8,
 		keyCode int,
+		threshold uint8,
 		releaseTime time.Duration,
 	)
 
 	// RegisterVelocityAction registers the action of pressing a key
 	// based on the velocity of the MIDI event.
 	// The greater the velocity, the closer to maxPress that the key is held down.
+	// The input is ignored if it's less than or equal to the threshold.
 	RegisterVelocityAction(
 		evType midi.MidiEventType,
 		channel,
 		key uint8,
 		keyCode int,
+		threshold uint8,
 		minPress,
 		maxPress time.Duration,
 	)
 
 	// RegisterToggleAction registers an action that toggles a key whenever
 	// the MIDI event is generated.
-	// To send quick presses, set a velocity threshold,
+	// To send quick presses, set a velocity toggleThreshold,
 	// bellow which the action will be executed regularly, instead of toggling.
 	// This also causes the toggle to get released, if it were pressed.
+	// The input is ignored if it's less than or equal to the threshold.
 	RegisterToggleAction(
 		evType midi.MidiEventType,
 		channel,
 		key uint8,
 		keyCode int,
-		threshold uint8,
+		threshold,
+		acceptThreshold uint8,
 		quickPressDuration time.Duration,
 	)
 
@@ -68,11 +74,14 @@ type KeyEvents interface {
 	// then the key will be released after shortRelease.
 	// Otherwise, it will stay pressed for maxRepeatDelayMs
 	// of the last event.
+	// The first of a series of repeated inputs
+	// is ignored if it's less than or equal to the threshold.
 	RegisterHoldAction(
 		evType midi.MidiEventType,
 		channel,
 		key uint8,
 		keyCode int,
+		threshold uint8,
 		maxRepeatDelayMs int32,
 		shortRelease time.Duration,
 	)
@@ -178,6 +187,7 @@ func (kbEv *keyEvents) RegisterBasicPressAction(
 	channel,
 	key uint8,
 	keyCode int,
+	threshold uint8,
 	releaseTime time.Duration,
 ) {
 
@@ -190,7 +200,7 @@ func (kbEv *keyEvents) RegisterBasicPressAction(
 
 	// Register the onPress function.
 	handler.action = func(ev midi.MidiEvent) {
-		if ev.Type != midi.EventNoteOn || ev.Velocity == 0 {
+		if ev.Type != midi.EventNoteOn || ev.Velocity <= threshold {
 			return
 		}
 
@@ -214,6 +224,7 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 	channel,
 	key uint8,
 	keyCode int,
+	threshold uint8,
 	minPress,
 	maxPress time.Duration,
 ) {
@@ -229,7 +240,7 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 
 	// Register the onPress function.
 	handler.action = func(ev midi.MidiEvent) {
-		if ev.Type != midi.EventNoteOn || ev.Velocity == 0 {
+		if ev.Type != midi.EventNoteOn || ev.Velocity <= threshold {
 			return
 		}
 
@@ -280,7 +291,8 @@ func (kbEv *keyEvents) RegisterToggleAction(
 	channel,
 	key uint8,
 	keyCode int,
-	threshold uint8,
+	threshold,
+	toggleThreshold uint8,
 	quickPressDuration time.Duration,
 ) {
 	event := generateNoteEvent(evType, channel, key)
@@ -295,7 +307,7 @@ func (kbEv *keyEvents) RegisterToggleAction(
 
 	// Register the onPress function.
 	handler.action = func(ev midi.MidiEvent) {
-		if ev.Type != midi.EventNoteOn || ev.Velocity == 0 {
+		if ev.Type != midi.EventNoteOn || ev.Velocity <= threshold {
 			return
 		}
 
@@ -313,7 +325,7 @@ func (kbEv *keyEvents) RegisterToggleAction(
 
 			// If the hit was bellow the threshold,
 			// simply do a quick press.
-			if ev.Velocity < threshold {
+			if ev.Velocity < toggleThreshold {
 				handler.QueueTimedAction(quickPressDuration)
 			}
 		}
@@ -334,6 +346,7 @@ func (kbEv *keyEvents) RegisterHoldAction(
 	channel,
 	key uint8,
 	keyCode int,
+	threshold uint8,
 	maxRepeatDelayMs int32,
 	shortRelease time.Duration,
 ) {
@@ -349,7 +362,9 @@ func (kbEv *keyEvents) RegisterHoldAction(
 
 	// Register the onPress function.
 	handler.action = func(ev midi.MidiEvent) {
-		if ev.Type != midi.EventNoteOn || ev.Velocity == 0 {
+		wasPressed := (ev.Timestamp-lastTimestamp > maxRepeatDelayMs)
+
+		if ev.Type != midi.EventNoteOn || ev.Velocity == 0 || (!wasPressed && ev.Velocity <= threshold) {
 			return
 		}
 
@@ -358,7 +373,7 @@ func (kbEv *keyEvents) RegisterHoldAction(
 		// If the event was sent quickly enough,
 		// requeue the action for a longer time.
 		// Otherwise, simply send a quick action.
-		if ev.Timestamp-lastTimestamp > maxRepeatDelayMs {
+		if wasPressed {
 			handler.QueueTimedAction(shortRelease)
 		} else {
 			handler.QueueTimedAction(time.Duration(maxRepeatDelayMs) * time.Millisecond)

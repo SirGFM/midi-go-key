@@ -39,22 +39,27 @@ This application allows mapping MIDI events into four different types of actions
 These actions must be configured through the following script:
 
 ```
-# Lines starting with '#' are comments (i.e., they are ignored by the application)
+# Lines starting with '#' are comments (i.e., they are ignored by the application).
 # NOTE: This application is quite limited and only accepts 'Note On' MIDI events, thus that's not configurable.
 
-# Do a Basic press on MIDI event 41, holding 'A' down for 1000 millisecond (i.e., 1 second)
-ch=9 ev=41 key=A BASIC 1000
+# Do a Basic press on MIDI event 41, holding 'A' down for 1000 millisecond (i.e., 1 second).
+# The input is ignored if its velocity is less than 30 (considering that it goes from 0 to 128).
+ch=9 ev=41 key=A thres=30 BASIC 1000
 
-# Do a Velocity-based press on MIDI event 43, holding 'B' down for 10 an 1000 millisecond, based on the event velocity
-ch=9 ev=43 key=B VELOCITY 10 1000
+# Do a Velocity-based press on MIDI event 43, holding 'B' down for 10 an 1000 millisecond, based on the event velocity.
+# The input is ignored if its velocity is less than 30 (considering that it goes from 0 to 128).
+ch=9 ev=43 key=B thres=30 VELOCITY 10 1000
 
 # Do a Toggle on MIDI event 44, toggle 'C' if the velocity is above 75 (considering that it goes from 0 to 128),
-# otherwise holding it down for 10 milliseconds
-ch=9 ev=44 key=C TOGGLE 75 10
+# otherwise holding it down for 10 milliseconds.
+# The input is only ignored if its velocity is 0.
+ch=9 ev=44 key=C thres=0 TOGGLE 75 10
 
 # Do a Repeated hold on MIDI event 48 (i.e., hex 30), holding 'D' down if the event is repeated every 100 milliseconds.
 # On the first (or only) event, the key is released after 10 milliseconds.
-ch=9 ev=0x30 key=D REPEAT 100 10
+# The first input in a sequence is ignored if its velocity is less than 20 (considering that it goes from 0 to 128),
+# but the following ones may be as light as you want.
+ch=9 ev=0x30 key=D thres=20 REPEAT 100 10
 ```
 
 Numbers may be written in any format, as long as they are properly prefixed.

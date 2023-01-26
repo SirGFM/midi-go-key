@@ -20,7 +20,7 @@ var actionsToArgCount = map[string]int{
 }
 
 // The minimum number of arguments in a line.
-const minArgs = 4
+const minArgs = 5
 
 // getInt reads an integer from arg, removing the prefix from the start.
 // badTokeErr is returned if the prefix is invalid, and invalidErr
@@ -85,8 +85,15 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 			return ErrConfigKeyInvalid
 		}
 
+		intThres, err := getInt(args[3], "thres=", ErrConfigThresholdTokenMissing, ErrConfigThresholdInvalid)
+		if err != nil {
+			return err
+		} else if intThres < 0 || intThres > 255 {
+			return ErrConfigThresholdInvalid
+		}
+
 		// Check that there are enough arguments for the action.
-		action := args[3]
+		action := args[4]
 		wantArgs, ok := actionsToArgCount[action]
 		if !ok {
 			return ErrConfigActionInvalid
@@ -112,6 +119,7 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 
 		ch := uint8(intCh)
 		ev := uint8(intEv)
+		threshold := uint8(intThres)
 
 		switch action {
 		case "BASIC":
@@ -122,6 +130,7 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 				ch,
 				ev,
 				key,
+				threshold,
 				releaseTime,
 			)
 		case "VELOCITY":
@@ -133,6 +142,7 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 				ch,
 				ev,
 				key,
+				threshold,
 				minPress,
 				maxPress,
 			)
@@ -140,6 +150,7 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 			if numArgs[0] > 128 {
 				return ErrConfigActionArgumentInvalid
 			}
+			acceptThreshold := threshold
 			threshold := uint8(numArgs[0])
 			quickPressDuration := time.Duration(numArgs[1]) * time.Millisecond
 
@@ -148,6 +159,7 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 				ch,
 				ev,
 				key,
+				acceptThreshold,
 				threshold,
 				quickPressDuration,
 			)
@@ -160,6 +172,7 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 				ch,
 				ev,
 				key,
+				threshold,
 				maxRepeatDelayMs,
 				shortRelease,
 			)

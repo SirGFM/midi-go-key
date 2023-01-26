@@ -162,8 +162,16 @@ func TestBasicPress(t *testing.T) {
 	const key uint8 = 2
 	const keyCode int = 3
 	const releaseTime = 10 * time.Millisecond
+	const threshold = 30
 
-	ke.RegisterBasicPressAction(evType, channel, key, keyCode, releaseTime)
+	ke.RegisterBasicPressAction(
+		evType,
+		channel,
+		key,
+		keyCode,
+		threshold,
+		releaseTime,
+	)
 
 	// Test that sending a MIDI event different from the expected doesn't set the key.
 	assert(t, kc[keyCode] == false, "Key was initially pressed")
@@ -203,8 +211,17 @@ func TestVelocityPress(t *testing.T) {
 	const keyCode int = 3
 	const minTime = 10 * time.Millisecond
 	const maxTime = 100 * time.Millisecond
+	const threshold = 0
 
-	ke.RegisterVelocityAction(evType, channel, key, keyCode, minTime, maxTime)
+	ke.RegisterVelocityAction(
+		evType,
+		channel,
+		key,
+		keyCode,
+		threshold,
+		minTime,
+		maxTime,
+	)
 
 	// Test that sending a MIDI event different from the expected doesn't set the key.
 	assert(t, kc[keyCode] == false, "Key was initially pressed")
@@ -260,8 +277,17 @@ func TestHoldPress(t *testing.T) {
 	const shortRelease = 10 * time.Millisecond
 	const maxDelayMs = 100
 	const eventDelay = 95 * time.Millisecond
+	const threshold = 30
 
-	ke.RegisterHoldAction(evType, channel, key, keyCode, maxDelayMs, shortRelease)
+	ke.RegisterHoldAction(
+		evType,
+		channel,
+		key,
+		keyCode,
+		threshold,
+		maxDelayMs,
+		shortRelease,
+	)
 
 	// Test that sending a MIDI event different from the expected doesn't set the key.
 	assert(t, kc[keyCode] == false, "Key was initially pressed")
@@ -330,8 +356,17 @@ func TestTogglePress(t *testing.T) {
 	const keyCode int = 3
 	const shortRelease = 10 * time.Millisecond
 	const threshold = 30
+	const toggleThreshold = 80
 
-	ke.RegisterToggleAction(evType, channel, key, keyCode, threshold, shortRelease)
+	ke.RegisterToggleAction(
+		evType,
+		channel,
+		key,
+		keyCode,
+		threshold,
+		toggleThreshold,
+		shortRelease,
+	)
 
 	// Test that sending a MIDI event different from the expected doesn't set the key.
 	assert(t, kc[keyCode] == false, "Key was initially pressed")
@@ -347,7 +382,7 @@ func TestTogglePress(t *testing.T) {
 		evType,
 		channel,
 		key,
-		threshold-1,
+		toggleThreshold-1,
 		conn,
 		shortRelease,
 		time.Millisecond/2,
@@ -360,7 +395,7 @@ func TestTogglePress(t *testing.T) {
 	go func() {
 		// Queue an event to be sent after maxTime.
 		time.Sleep(maxTime)
-		sendMidiEvent(evType, channel, key, threshold, conn, shortRelease)
+		sendMidiEvent(evType, channel, key, toggleThreshold, conn, shortRelease)
 	}()
 
 	assertKeyEvent(
@@ -370,7 +405,7 @@ func TestTogglePress(t *testing.T) {
 		evType,
 		channel,
 		key,
-		threshold+1,
+		toggleThreshold+1,
 		conn,
 		maxTime,
 		time.Millisecond/2,

@@ -26,6 +26,10 @@ const (
 	ErrConfigActionInvalid
 	// Invalid action argument, expect a positive integer
 	ErrConfigActionArgumentInvalid
+	// Missing token "thres=" for threshold
+	ErrConfigThresholdTokenMissing
+	// Invalid event, must be a value between 0 and 255
+	ErrConfigThresholdInvalid
 )
 
 // Implements the 'error' interface for 'errCode'.
@@ -53,6 +57,10 @@ func (e errCode) Error() string {
 		return `(key_events) invalid action, must one of BASIC, VELOCITY, TOGGLE, REPEAT`
 	case ErrConfigActionArgumentInvalid:
 		return "(key_events) invalid action argument, expect a positive integer"
+	case ErrConfigThresholdTokenMissing:
+		return `(key_events) missing token "thres=" for threshold`
+	case ErrConfigThresholdInvalid:
+		return "(key_events) invalid event, must be a value between 0 and 255"
 	default:
 		return "(key_events) unknown error"
 	}
