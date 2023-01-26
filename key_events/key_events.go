@@ -88,11 +88,13 @@ type keyEvents struct {
 	actions map[noteEvent]*midiAction
 	// Receive actions that should be generated based on a timer.
 	timedAction chan timerAction
+	// Whether unhandled events should be logged.
+	logUnhandled bool
 }
 
 // NewKeyEvents creates and starts a new event generator.
 // When conn is closed, the key event generator stops running.
-func NewKeyEvents(conn <-chan midi.MidiEvent) (KeyEvents, error) {
+func NewKeyEvents(conn <-chan midi.MidiEvent, logUnhandled bool) (KeyEvents, error) {
 	kb, err := keybd_event.NewKeyBonding()
 	if err != nil {
 		return nil, err_wrap.Wrap(err, ErrGetKeyGenerator)
@@ -104,10 +106,11 @@ func NewKeyEvents(conn <-chan midi.MidiEvent) (KeyEvents, error) {
 	}
 
 	kbEv := &keyEvents{
-		kb:          &kb,
-		conn:        conn,
-		actions:     make(map[noteEvent]*midiAction),
-		timedAction: make(chan timerAction, timedActionQueueSize),
+		kb:           &kb,
+		conn:         conn,
+		actions:      make(map[noteEvent]*midiAction),
+		timedAction:  make(chan timerAction, timedActionQueueSize),
+		logUnhandled: logUnhandled,
 	}
 	go kbEv.run()
 
@@ -148,6 +151,8 @@ func (kbEv *keyEvents) handleMidiEvent(midiEv midi.MidiEvent) {
 
 	if action, ok := kbEv.actions[event]; ok {
 		action.action(midiEv)
+	} else if kbEv.logUnhandled {
+		fmt.Printf("unhandled: %s\n", midiEv)
 	}
 }
 

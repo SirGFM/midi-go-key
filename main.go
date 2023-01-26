@@ -20,6 +20,7 @@ func main() {
 	port := flag.Int("port", 0, "the device's port")
 	list := flag.Bool("list", false, "whether the application should list the devices and exit")
 	path := flag.String("config", "./config.txt", "the path to the configuration file")
+	logUnhandled := flag.Bool("log-unhandled", false, "whether unhandled events should be logged")
 	flag.Parse()
 
 	// List the devices and exit.
@@ -48,17 +49,23 @@ func main() {
 		path = new(string)
 		*path = "./config.txt"
 	}
+	if logUnhandled == nil {
+		logUnhandled = new(bool)
+		*logUnhandled = false
+	}
 
 	conn := make(chan midi.MidiEvent, *eventQueueSize)
-	kb, err := key_events.NewKeyEvents(conn)
+	kb, err := key_events.NewKeyEvents(conn, *logUnhandled)
 	if err != nil {
 		panic(fmt.Sprintf("%+v", err))
 	}
 	defer kb.Close()
 
-	err = kb.ReadConfig(*path)
-	if err != nil {
-		panic(fmt.Sprintf("%+v", err))
+	if len(*path) > 0 {
+		err = kb.ReadConfig(*path)
+		if err != nil {
+			panic(fmt.Sprintf("%+v", err))
+		}
 	}
 
 	midiDev, err := midi.NewMidi(*port, conn)
