@@ -104,9 +104,9 @@ func NewKeyEvents(conn <-chan midi.MidiEvent) (KeyEvents, error) {
 	}
 
 	kbEv := &keyEvents{
-		kb:      &kb,
-		conn:    conn,
-		actions: make(map[noteEvent]*midiAction),
+		kb:          &kb,
+		conn:        conn,
+		actions:     make(map[noteEvent]*midiAction),
 		timedAction: make(chan timerAction, timedActionQueueSize),
 	}
 	go kbEv.run()
@@ -363,7 +363,7 @@ func (kbEv *keyEvents) RegisterHoldAction(
 		// If the event was sent quickly enough,
 		// requeue the action for a longer time.
 		// Otherwise, simply send a quick action.
-		if ev.Timestamp - lastTimestamp > maxRepeatDelayMs {
+		if ev.Timestamp-lastTimestamp > maxRepeatDelayMs {
 			handler.QueueTimedAction(shortRelease)
 		} else {
 			handler.QueueTimedAction(time.Duration(maxRepeatDelayMs) * time.Millisecond)

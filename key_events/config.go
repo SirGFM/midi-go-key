@@ -3,20 +3,20 @@ package key_events
 import (
 	"bufio"
 	"os"
-	"time"
-	"strings"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/SirGFM/midi-go-key/err_wrap"
 	"github.com/SirGFM/midi-go-key/midi"
 )
 
 // List how many arguments each action has
-var actionsToArgCount = map[string]int {
-	"BASIC": 1,
+var actionsToArgCount = map[string]int{
+	"BASIC":    1,
 	"VELOCITY": 2,
-	"TOGGLE": 2,
-	"REPEAT": 2,
+	"TOGGLE":   2,
+	"REPEAT":   2,
 }
 
 // The minimum number of arguments in a line.
@@ -90,7 +90,7 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 		wantArgs, ok := actionsToArgCount[action]
 		if !ok {
 			return ErrConfigActionInvalid
-		} else if len(args) != wantArgs + minArgs {
+		} else if len(args) != wantArgs+minArgs {
 			return ErrConfigArgsBad
 		}
 
