@@ -1,7 +1,7 @@
 package key_events
 
 import (
-	"fmt"
+	"log"
 	"runtime"
 	"time"
 
@@ -144,7 +144,7 @@ func (kbEv *keyEvents) handleMidiEvent(midiEv midi.MidiEvent) {
 	var event noteEvent
 
 	if len(midiEv.Source) < len(event) {
-		fmt.Printf("(key_events): Invalid event received: %s\n", midiEv)
+		log.Printf("invalid event received: %s\n", midiEv)
 		return
 	}
 	copy(event[:], midiEv.Source)
@@ -152,7 +152,7 @@ func (kbEv *keyEvents) handleMidiEvent(midiEv midi.MidiEvent) {
 	if action, ok := kbEv.actions[event]; ok {
 		action.action(midiEv)
 	} else if kbEv.logUnhandled {
-		fmt.Printf("unhandled: %s\n", midiEv)
+		log.Printf("unhandled: %s\n", midiEv)
 	}
 }
 
@@ -237,7 +237,7 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 		}
 
 		if ev.Velocity > midi.MaxVelocity {
-			fmt.Printf("max velocity was reached! %d\n", ev.Velocity)
+			log.Printf("max velocity was reached! %d\n", ev.Velocity)
 		}
 
 		// Calculate how long the key should be pressed based on the key velocity.

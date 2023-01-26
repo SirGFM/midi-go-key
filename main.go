@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 
@@ -30,9 +31,9 @@ func main() {
 			panic(fmt.Sprintf("%+v", err))
 		}
 
-		fmt.Println("Device(s):")
+		log.Println("device(s):")
 		for _, dev := range devs {
-			fmt.Printf("%s: Port=%d\n", dev.Name, dev.Port)
+			log.Printf("%s: port=%d", dev.Name, dev.Port)
 		}
 
 		return
@@ -75,9 +76,9 @@ func main() {
 	defer midiDev.Close()
 
 	// Register a signal handler, so the application may sleep until it's done.
-	fmt.Println("Listening to device...")
+	log.Println("listening to device...")
 	intHndlr := make(chan os.Signal, 1)
 	signal.Notify(intHndlr, os.Interrupt)
 	<-intHndlr
-	fmt.Printf("Exiting...")
+	log.Printf("exiting...")
 }
