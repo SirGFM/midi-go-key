@@ -8,8 +8,6 @@ import (
 
 	"github.com/SirGFM/midi-go-key/key_events"
 	"github.com/SirGFM/midi-go-key/midi"
-
-	"time"
 )
 
 // How many events may be queued
@@ -21,6 +19,7 @@ func main() {
 	eventQueueSize := flag.Int("queueSize", defaulEventQueueSize, "how many events may be queued")
 	port := flag.Int("port", 0, "the device's port")
 	list := flag.Bool("list", false, "whether the application should list the devices and exit")
+	path := flag.String("config", "./config.txt", "the path to the configuration file")
 	flag.Parse()
 
 	// List the devices and exit.
@@ -45,6 +44,10 @@ func main() {
 		eventQueueSize = new(int)
 		*eventQueueSize = defaulEventQueueSize
 	}
+	if path == nil {
+		path = new(string)
+		*path = "./config.txt"
+	}
 
 	conn := make(chan midi.MidiEvent, *eventQueueSize)
 	kb, err := key_events.NewKeyEvents(conn)
@@ -53,14 +56,10 @@ func main() {
 	}
 	defer kb.Close()
 
-	// Press 'A' after a tom4.
-	kb.RegisterBasicPressAction(midi.EventNoteOn, 9, 41, 30, time.Second)
-	// Press 'B' after a tom3
-	kb.RegisterVelocityAction(midi.EventNoteOn, 9, 43, 48, time.Millisecond * 10, time.Second)
-	// Press 'C' after a hi-hat
-	kb.RegisterToggleAction(midi.EventNoteOn, 9, 44, 46, 75, time.Millisecond * 10)
-	// Press 'D' after a tom1
-	kb.RegisterHoldAction(midi.EventNoteOn, 9, 48, 32, 100, time.Millisecond * 10)
+	err = kb.ReadConfig(*path)
+	if err != nil {
+		panic(fmt.Sprintf("%+v", err))
+	}
 
 	midiDev, err := midi.NewMidi(*port, conn)
 	if err != nil {

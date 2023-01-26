@@ -67,6 +67,9 @@ type KeyEvents interface {
 		maxRepeatDelayMs int32,
 		shortRelease time.Duration,
 	)
+
+	// ReadConfig reads the configuration file in path and registers the listed actions.
+	ReadConfig(path string) error
 }
 
 // A MIDI event generated for a given note,
