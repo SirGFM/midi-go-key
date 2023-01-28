@@ -218,7 +218,6 @@ func (kbEv *keyEvents) RegisterBasicPressAction(
 	kbEv.actions[event] = handler
 }
 
-//	- ex: hit drum pedal -> press up key based on the velocity
 func (kbEv *keyEvents) RegisterVelocityAction(
 	evType midi.MidiEventType,
 	channel,
