@@ -2,16 +2,25 @@ package key_events
 
 import (
 	"log"
-	"runtime"
 	"time"
 
-	"github.com/SirGFM/midi-go-key/err_wrap"
 	"github.com/SirGFM/midi-go-key/midi"
-	"github.com/micmonay/keybd_event"
 )
 
 // How many timed actions may be queued at once.
 const timedActionQueueSize = 64
+
+// Controls the keyboard by pressing and releasing keys.
+type KeyController interface {
+	// Releases every resource associated with the key controller.
+	Close() error
+
+	// PressKeys presses the requested keys, by their keycode.
+	PressKeys(...int)
+
+	// ReleaseKeys releases the requested keys, by their keycode.
+	ReleaseKeys(...int)
+}
 
 type KeyEvents interface {
 	// Releases every resource associated with the key events generator
@@ -80,8 +89,8 @@ type noteEvent [2]byte
 type timerAction func()
 
 type keyEvents struct {
-	// The internal key events generator.
-	kb *keybd_event.KeyBonding
+	// The internal key controller.
+	kc KeyController
 	// The channel used to receive MIDI events.
 	conn <-chan midi.MidiEvent
 	// List actions taken in response to the registered actions.
@@ -94,19 +103,9 @@ type keyEvents struct {
 
 // NewKeyEvents creates and starts a new event generator.
 // When conn is closed, the key event generator stops running.
-func NewKeyEvents(conn <-chan midi.MidiEvent, logUnhandled bool) (KeyEvents, error) {
-	kb, err := keybd_event.NewKeyBonding()
-	if err != nil {
-		return nil, err_wrap.Wrap(err, ErrGetKeyGenerator)
-	}
-
-	// For linux, it is very important to wait 2 seconds
-	if runtime.GOOS == "linux" {
-		time.Sleep(2 * time.Second)
-	}
-
+func NewKeyEvents(kc KeyController, conn <-chan midi.MidiEvent, logUnhandled bool) (KeyEvents, error) {
 	kbEv := &keyEvents{
-		kb:           &kb,
+		kc:           kc,
 		conn:         conn,
 		actions:      make(map[noteEvent]*midiAction),
 		timedAction:  make(chan timerAction, timedActionQueueSize),
@@ -118,7 +117,7 @@ func NewKeyEvents(conn <-chan midi.MidiEvent, logUnhandled bool) (KeyEvents, err
 }
 
 func (kbEv *keyEvents) Close() error {
-	return nil
+	return kbEv.kc.Close()
 }
 
 // run listens for MIDI events and generates key events.
@@ -195,8 +194,7 @@ func (kbEv *keyEvents) RegisterBasicPressAction(
 			return
 		}
 
-		kbEv.kb.SetKeys(keyCode)
-		kbEv.kb.Press()
+		kbEv.kc.PressKeys(keyCode)
 
 		handler.QueueTimedAction(releaseTime)
 	}
@@ -204,8 +202,7 @@ func (kbEv *keyEvents) RegisterBasicPressAction(
 	// Register the onRelease function,
 	// automatically queued after releaseTime from the press.
 	handler.onTimeout = func() {
-		kbEv.kb.SetKeys(keyCode)
-		kbEv.kb.Release()
+		kbEv.kc.ReleaseKeys(keyCode)
 	}
 
 	kbEv.actions[event] = handler
@@ -247,8 +244,7 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 		releaseTime += minPress
 
 		onPress := func() {
-			kbEv.kb.SetKeys(keyCode)
-			kbEv.kb.Press()
+			kbEv.kc.PressKeys(keyCode)
 
 			isPressed = true
 
@@ -258,8 +254,7 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 		if isPressed {
 			// If the key was already pressed,
 			// release it momentarily and then press it again.
-			kbEv.kb.SetKeys(keyCode)
-			kbEv.kb.Release()
+			kbEv.kc.ReleaseKeys(keyCode)
 
 			go func() {
 				time.Sleep(time.Millisecond)
@@ -273,8 +268,7 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 	// Register the onRelease function,
 	// automatically queued after releaseTime from the press.
 	handler.onTimeout = func() {
-		kbEv.kb.SetKeys(keyCode)
-		kbEv.kb.Release()
+		kbEv.kc.ReleaseKeys(keyCode)
 		isPressed = false
 	}
 
@@ -307,15 +301,13 @@ func (kbEv *keyEvents) RegisterToggleAction(
 
 		if isPressed {
 			// If it is pressed, simply release it.
-			kbEv.kb.SetKeys(keyCode)
-			kbEv.kb.Release()
+			kbEv.kc.ReleaseKeys(keyCode)
 
 			isPressed = false
 			handler.UnqueueTimedAction()
 		} else {
 			// Otherwise, simply toggle it on.
-			kbEv.kb.SetKeys(keyCode)
-			kbEv.kb.Press()
+			kbEv.kc.PressKeys(keyCode)
 
 			isPressed = true
 
@@ -330,8 +322,7 @@ func (kbEv *keyEvents) RegisterToggleAction(
 	// Register the onRelease function,
 	// automatically queued after releaseTime from a press bellow the threshold.
 	handler.onTimeout = func() {
-		kbEv.kb.SetKeys(keyCode)
-		kbEv.kb.Release()
+		kbEv.kc.ReleaseKeys(keyCode)
 		isPressed = false
 	}
 
@@ -362,8 +353,7 @@ func (kbEv *keyEvents) RegisterHoldAction(
 			return
 		}
 
-		kbEv.kb.SetKeys(keyCode)
-		kbEv.kb.Press()
+		kbEv.kc.PressKeys(keyCode)
 
 		// If the event was sent quickly enough,
 		// requeue the action for a longer time.
@@ -380,8 +370,7 @@ func (kbEv *keyEvents) RegisterHoldAction(
 	// Register the onRelease function,
 	// automatically queued after releaseTime from the press.
 	handler.onTimeout = func() {
-		kbEv.kb.SetKeys(keyCode)
-		kbEv.kb.Release()
+		kbEv.kc.ReleaseKeys(keyCode)
 	}
 
 	kbEv.actions[event] = handler

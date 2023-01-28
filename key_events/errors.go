@@ -4,10 +4,8 @@ package key_events
 type errCode int
 
 const (
-	// Failed to start the key generator
-	ErrGetKeyGenerator errCode = iota
 	// Failed to open the config file
-	ErrOpenConfig
+	ErrOpenConfig errCode = iota
 	// Failed to read the config file
 	ErrReadFile
 	// Config line is missing some arguments (or has too many arguments)
@@ -33,8 +31,6 @@ const (
 // Implements the 'error' interface for 'errCode'.
 func (e errCode) Error() string {
 	switch e {
-	case ErrGetKeyGenerator:
-		return "(key_events) failed to start the key generator"
 	case ErrOpenConfig:
 		return "(key_events) failed to open the config file"
 	case ErrReadFile:

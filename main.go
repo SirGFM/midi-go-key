@@ -8,6 +8,7 @@ import (
 	"os/signal"
 
 	"github.com/SirGFM/midi-go-key/key_events"
+	"github.com/SirGFM/midi-go-key/key_events/key_handler"
 	"github.com/SirGFM/midi-go-key/midi"
 )
 
@@ -56,7 +57,13 @@ func main() {
 	}
 
 	conn := make(chan midi.MidiEvent, *eventQueueSize)
-	kb, err := key_events.NewKeyEvents(conn, *logUnhandled)
+
+	kc, err := key_handler.New()
+	if err != nil {
+		panic(fmt.Sprintf("%+v", err))
+	}
+
+	kb, err := key_events.NewKeyEvents(kc, conn, *logUnhandled)
 	if err != nil {
 		panic(fmt.Sprintf("%+v", err))
 	}
