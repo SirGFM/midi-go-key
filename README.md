@@ -58,3 +58,11 @@ ch=9 ev=0x30 key=D REPEAT 100 10
 ```
 
 Numbers may be written in any format, as long as they are properly prefixed.
+
+## Testing
+
+To run tests without installing `midicat`, specify the build tag `test`:
+
+```bash
+go test --tags=test ./...
+```

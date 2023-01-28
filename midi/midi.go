@@ -8,7 +8,6 @@ import (
 	"github.com/SirGFM/midi-go-key/err_wrap"
 	"gitlab.com/gomidi/midi/v2"
 	"gitlab.com/gomidi/midi/v2/drivers"
-	_ "gitlab.com/gomidi/midi/v2/drivers/midicatdrv"
 )
 
 // The maximum velocity reported by the driver for any given MIDI event.
