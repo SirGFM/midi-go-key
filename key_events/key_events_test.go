@@ -1,7 +1,6 @@
 package key_events
 
 import (
-	"fmt"
 	"runtime/debug"
 	"testing"
 	"time"
@@ -9,8 +8,37 @@ import (
 	"github.com/SirGFM/midi-go-key/midi"
 )
 
+// A single mocked key code.
+type mockKeyCode struct {
+	// Signal that the keyCode changed to a new state.
+	newState chan bool
+	// The keyCode's current state.
+	state bool
+}
+
+// Set switches the key code to the new state, only if not set.
+func (kc *mockKeyCode) Set(state bool) {
+	if kc.state != state {
+		kc.newState <- state
+		kc.state = state
+	}
+}
+
 // Mocks KeyController.
-type mockKeyController map[int]bool
+type mockKeyController map[int]*mockKeyCode
+
+func NewMockKeyController(keyCodes ...int) mockKeyController {
+	kc := make(mockKeyController)
+
+	for _, keyCode := range keyCodes {
+		kc[keyCode] = &mockKeyCode{
+			newState: make(chan bool, 1),
+			state:    false,
+		}
+	}
+
+	return kc
+}
 
 func (kc mockKeyController) Close() error {
 	return nil
@@ -18,13 +46,13 @@ func (kc mockKeyController) Close() error {
 
 func (kc mockKeyController) PressKeys(keyCodes ...int) {
 	for _, keyCode := range keyCodes {
-		kc[keCode] = true
+		kc[keyCode].Set(true)
 	}
 }
 
 func (kc mockKeyController) ReleaseKeys(keyCodes ...int) {
 	for _, keyCode := range keyCodes {
-		kc[keyCode] = false
+		kc[keyCode].Set(false)
 	}
 }
 
@@ -48,8 +76,7 @@ func sendMidiEvent(
 	midiKey,
 	velocity uint8,
 	conn chan midi.MidiEvent,
-	duration time.Duration,
-) time.Time {
+) {
 	now := time.Now()
 	timestamp := now.Sub(lastSend) / time.Millisecond
 	if timestamp > 0xffffffff {
@@ -58,7 +85,6 @@ func sendMidiEvent(
 
 	source := generateNoteEvent(evType, channel, midiKey)
 
-	deadline := time.Now().Add(duration)
 	conn <- midi.MidiEvent{
 		Source:    source[:],
 		Timestamp: int32(timestamp),
@@ -70,8 +96,6 @@ func sendMidiEvent(
 
 	// Update the last send date.
 	lastSend = now
-
-	return deadline
 }
 
 // assertKeyEvent sends a MIDI event of the supplied on conn,
@@ -88,62 +112,57 @@ func assertKeyEvent(
 	velocity uint8,
 	conn chan midi.MidiEvent,
 	duration,
-	step,
 	graceTime time.Duration,
 ) {
+	held := time.After(duration - graceTime)
+	deadline := time.After(duration + 2*graceTime)
+
 	start := time.Now()
-	deadline := sendMidiEvent(evType, channel, midiKey, velocity, conn, duration)
+	sendMidiEvent(evType, channel, midiKey, velocity, conn)
 
-	// Wait a bit longer to be 100% sure the release event was handled.
-	time.Sleep(step)
-
-	count := 0
-	for time.Now().Before(deadline) {
-		assert(
-			t,
-			kc[keyCode] == true,
-			"Key wasn't held down for the desired duration. Count=%d; Elapsed=%s",
-			count,
-			time.Now().Sub(start),
-		)
-		time.Sleep(step)
-		count++
-	}
-
-	assert(t, count >= 1, "Key press wasn't checked even once")
-
-	// Wait until the key is actually released
-	// (assuming it may little longer than expected).
-	for deadline := time.Now().Add(graceTime); kc[keyCode] && time.Now().Before(deadline); {
-		time.Sleep(step)
-	}
-
-	// If the key wasn't actually released,
-	// wait a bit longer so we may long when (and if) it was actually released.
-	if kc[keyCode] != false {
-		elapsed := time.Now().Sub(start)
-
-		// Wait a bit more too see if the key would be release soonish.
-		for i := 200; kc[keyCode] && i > 0; i-- {
-			time.Sleep(time.Millisecond)
-			i--
+	// Check that the keyCode was pressed.
+	select {
+	case <-time.After(time.Millisecond / 2):
+		t.Fatalf("failed to detect that the keyCode was pressed in time")
+	case pressed := <-kc[keyCode].newState:
+		if !pressed {
+			t.Fatalf("keyCode wasn't pressed in time")
 		}
+	}
+
+	// Check that the keyCode was held for long enough.
+	select {
+	case <-kc[keyCode].newState:
+		t.Fatalf("keyCode was released early")
+	case <-held:
+		// Key was held down for as long as desired!
+	}
+
+	// Check that the keyCode was release in time.
+	select {
+	case <-deadline:
+		t.Fatalf("failed to detect that the keyCode was released in time")
+	case pressed := <-kc[keyCode].newState:
+		if pressed {
+			t.Fatalf("keyCode wasn't released in time")
+		}
+		return
+	}
+
+	// If the keyCode wasn't released in time,
+	// wait for a little longer to check if it's a simple timming thing.
+	elapsed := time.Now().Sub(start)
+	select {
+	case <-time.After(time.Millisecond * 200):
 		afterRetest := time.Now().Sub(start)
-
-		var debug string
-		if kc[keyCode] == false {
-			debug = fmt.Sprintf("KeyCode released after %s", afterRetest)
+		t.Fatalf("keyCode release wasn't detected even after %s; elapsed=%s", afterRetest, elapsed)
+	case pressed := <-kc[keyCode].newState:
+		afterRetest := time.Now().Sub(start)
+		if pressed {
+			t.Fatalf("keyCode wasn't released even after %s; elapsed=%s", afterRetest, elapsed)
 		} else {
-			debug = fmt.Sprintf("KeyCode wasn't released even after %s", afterRetest)
+			t.Fatalf("keyCode was released only after %s; elapsed=%s", afterRetest, elapsed)
 		}
-
-		assert(
-			t,
-			false,
-			"KeyCode wasn't released. Elapsed=%s; %s",
-			elapsed,
-			debug,
-		)
 	}
 }
 
@@ -158,7 +177,7 @@ func TestBasicPress(t *testing.T) {
 
 	conn := make(chan midi.MidiEvent, 1)
 	defer close(conn)
-	kc := make(mockKeyController)
+	kc := NewMockKeyController(keyCode)
 	defer kc.Close()
 
 	ke, err := NewKeyEvents(kc, conn, false)
@@ -174,11 +193,14 @@ func TestBasicPress(t *testing.T) {
 		releaseTime,
 	)
 
-	// Test that sending a MIDI event different from the expected doesn't set the key.
-	assert(t, kc[keyCode] == false, "Key was initially pressed")
-	sendMidiEvent(evType, channel, badKey, 100, conn, releaseTime)
-	time.Sleep(time.Millisecond)
-	assert(t, kc[keyCode] == false, "Key was pressed by an invalid MIDI event")
+	// Test that sending a MIDI event different from the expected doesn't set the keyCode.
+	sendMidiEvent(evType, channel, badKey, 100, conn)
+	select {
+	case <-kc[keyCode].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-time.After(time.Millisecond):
+		// Key wasn't pressed, as expected!
+	}
 
 	// Test that sending the event keeps the keyCode pressed for the desired time.
 	assertKeyEvent(
@@ -191,7 +213,6 @@ func TestBasicPress(t *testing.T) {
 		100,
 		conn,
 		releaseTime,
-		time.Millisecond/2,
 		time.Millisecond,
 	)
 }
@@ -208,7 +229,7 @@ func TestVelocityPress(t *testing.T) {
 
 	conn := make(chan midi.MidiEvent, 1)
 	defer close(conn)
-	kc := make(mockKeyController)
+	kc := NewMockKeyController(keyCode)
 	defer kc.Close()
 
 	ke, err := NewKeyEvents(kc, conn, false)
@@ -225,11 +246,14 @@ func TestVelocityPress(t *testing.T) {
 		maxTime,
 	)
 
-	// Test that sending a MIDI event different from the expected doesn't set the key.
-	assert(t, kc[keyCode] == false, "Key was initially pressed")
-	sendMidiEvent(evType, channel, badKey, 100, conn, minTime)
-	time.Sleep(time.Millisecond)
-	assert(t, kc[keyCode] == false, "Key was pressed by an invalid MIDI event")
+	// Test that sending a MIDI event different from the expected doesn't set the keyCode.
+	sendMidiEvent(evType, channel, badKey, 100, conn)
+	select {
+	case <-kc[keyCode].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-time.After(time.Millisecond):
+		// Key wasn't pressed, as expected!
+	}
 
 	// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
 	assertKeyEvent(
@@ -242,7 +266,6 @@ func TestVelocityPress(t *testing.T) {
 		1,
 		conn,
 		minTime,
-		time.Millisecond/2,
 		time.Millisecond,
 	)
 
@@ -257,7 +280,6 @@ func TestVelocityPress(t *testing.T) {
 		128,
 		conn,
 		maxTime,
-		time.Millisecond/2,
 		time.Millisecond,
 	)
 }
@@ -275,7 +297,7 @@ func TestHoldPress(t *testing.T) {
 
 	conn := make(chan midi.MidiEvent, 1)
 	defer close(conn)
-	kc := make(mockKeyController)
+	kc := NewMockKeyController(keyCode)
 	defer kc.Close()
 
 	ke, err := NewKeyEvents(kc, conn, false)
@@ -292,11 +314,14 @@ func TestHoldPress(t *testing.T) {
 		shortRelease,
 	)
 
-	// Test that sending a MIDI event different from the expected doesn't set the key.
-	assert(t, kc[keyCode] == false, "Key was initially pressed")
-	sendMidiEvent(evType, channel, badKey, 100, conn, shortRelease)
-	time.Sleep(time.Millisecond)
-	assert(t, kc[keyCode] == false, "Key was pressed by an invalid MIDI event")
+	// Test that sending a MIDI event different from the expected doesn't set the keyCode.
+	sendMidiEvent(evType, channel, badKey, 100, conn)
+	select {
+	case <-kc[keyCode].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-time.After(time.Millisecond):
+		// Key wasn't pressed, as expected!
+	}
 
 	// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
 	lastSend = time.Now().Add(-shortRelease - maxDelayMs*time.Millisecond)
@@ -310,7 +335,6 @@ func TestHoldPress(t *testing.T) {
 		100,
 		conn,
 		shortRelease,
-		time.Millisecond/2,
 		time.Millisecond,
 	)
 
@@ -318,12 +342,9 @@ func TestHoldPress(t *testing.T) {
 	const count = 5
 	const maxTime = eventDelay * count
 	go func() {
-		// Wait until the event was sent by assertKeyEvent()
-		time.Sleep(time.Millisecond / 2)
-
 		// Queue events roughly following the expected duration.
 		for i := 0; i < count; i++ {
-			sendMidiEvent(evType, channel, midiKey, 100, conn, shortRelease)
+			sendMidiEvent(evType, channel, midiKey, 100, conn)
 			time.Sleep(eventDelay)
 		}
 	}()
@@ -338,7 +359,6 @@ func TestHoldPress(t *testing.T) {
 		100,
 		conn,
 		maxTime,
-		time.Millisecond/2,
 		time.Millisecond*10,
 	)
 }
@@ -355,7 +375,7 @@ func TestTogglePress(t *testing.T) {
 
 	conn := make(chan midi.MidiEvent, 1)
 	defer close(conn)
-	kc := make(mockKeyController)
+	kc := NewMockKeyController(keyCode)
 	defer kc.Close()
 
 	ke, err := NewKeyEvents(kc, conn, false)
@@ -372,11 +392,14 @@ func TestTogglePress(t *testing.T) {
 		shortRelease,
 	)
 
-	// Test that sending a MIDI event different from the expected doesn't set the key.
-	assert(t, kc[keyCode] == false, "Key was initially pressed")
-	sendMidiEvent(evType, channel, badKey, 100, conn, shortRelease)
-	time.Sleep(time.Millisecond)
-	assert(t, kc[keyCode] == false, "Key was pressed by an invalid MIDI event")
+	// Test that sending a MIDI event different from the expected doesn't set the keyCode.
+	sendMidiEvent(evType, channel, badKey, 100, conn)
+	select {
+	case <-kc[keyCode].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-time.After(time.Millisecond):
+		// Key wasn't pressed, as expected!
+	}
 
 	// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
 	assertKeyEvent(
@@ -389,7 +412,6 @@ func TestTogglePress(t *testing.T) {
 		toggleThreshold-1,
 		conn,
 		shortRelease,
-		time.Millisecond/2,
 		time.Millisecond,
 	)
 
@@ -399,7 +421,7 @@ func TestTogglePress(t *testing.T) {
 	go func() {
 		// Queue an event to be sent after maxTime.
 		time.Sleep(maxTime)
-		sendMidiEvent(evType, channel, midiKey, toggleThreshold, conn, shortRelease)
+		sendMidiEvent(evType, channel, midiKey, toggleThreshold, conn)
 	}()
 
 	assertKeyEvent(
@@ -412,7 +434,6 @@ func TestTogglePress(t *testing.T) {
 		toggleThreshold+1,
 		conn,
 		maxTime,
-		time.Millisecond/2,
 		time.Millisecond*5,
 	)
 }
