@@ -16,15 +16,15 @@ func (kc mockKeyController) Close() error {
 	return nil
 }
 
-func (kc mockKeyController) PressKeys(keys ...int) {
-	for _, key := range keys {
-		kc[key] = true
+func (kc mockKeyController) PressKeys(keyCodes ...int) {
+	for _, keyCode := range keyCodes {
+		kc[keCode] = true
 	}
 }
 
-func (kc mockKeyController) ReleaseKeys(keys ...int) {
-	for _, key := range keys {
-		kc[key] = false
+func (kc mockKeyController) ReleaseKeys(keyCodes ...int) {
+	for _, keyCode := range keyCodes {
+		kc[keyCode] = false
 	}
 }
 
@@ -45,7 +45,7 @@ var lastSend = time.Now()
 func sendMidiEvent(
 	evType midi.MidiEventType,
 	channel,
-	key,
+	midiKey,
 	velocity uint8,
 	conn chan midi.MidiEvent,
 	duration time.Duration,
@@ -56,7 +56,7 @@ func sendMidiEvent(
 		panic("timestamp extrapolated an int32")
 	}
 
-	source := generateNoteEvent(evType, channel, key)
+	source := generateNoteEvent(evType, channel, midiKey)
 
 	deadline := time.Now().Add(duration)
 	conn <- midi.MidiEvent{
@@ -64,7 +64,7 @@ func sendMidiEvent(
 		Timestamp: int32(timestamp),
 		Type:      evType,
 		Channel:   channel,
-		Key:       key,
+		Key:       midiKey,
 		Velocity:  velocity,
 	}
 
@@ -84,7 +84,7 @@ func assertKeyEvent(
 	keyCode int,
 	evType midi.MidiEventType,
 	channel,
-	key,
+	midiKey,
 	velocity uint8,
 	conn chan midi.MidiEvent,
 	duration,
@@ -92,7 +92,7 @@ func assertKeyEvent(
 	graceTime time.Duration,
 ) {
 	start := time.Now()
-	deadline := sendMidiEvent(evType, channel, key, velocity, conn, duration)
+	deadline := sendMidiEvent(evType, channel, midiKey, velocity, conn, duration)
 
 	// Wait a bit longer to be 100% sure the release event was handled.
 	time.Sleep(step)
@@ -132,15 +132,15 @@ func assertKeyEvent(
 
 		var debug string
 		if kc[keyCode] == false {
-			debug = fmt.Sprintf("Key released after %s", afterRetest)
+			debug = fmt.Sprintf("KeyCode released after %s", afterRetest)
 		} else {
-			debug = fmt.Sprintf("Key wasn't released even after %s", afterRetest)
+			debug = fmt.Sprintf("KeyCode wasn't released even after %s", afterRetest)
 		}
 
 		assert(
 			t,
 			false,
-			"Key wasn't released. Elapsed=%s; %s",
+			"KeyCode wasn't released. Elapsed=%s; %s",
 			elapsed,
 			debug,
 		)
@@ -148,6 +148,14 @@ func assertKeyEvent(
 }
 
 func TestBasicPress(t *testing.T) {
+	const evType = midi.EventNoteOn
+	const channel = 1
+	const midiKey = 2
+	const badKey = 3
+	const keyCode = 3
+	const releaseTime = 10 * time.Millisecond
+	const threshold = 30
+
 	conn := make(chan midi.MidiEvent, 1)
 	defer close(conn)
 	kc := make(mockKeyController)
@@ -157,17 +165,10 @@ func TestBasicPress(t *testing.T) {
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
-	const evType = midi.EventNoteOn
-	const channel uint8 = 1
-	const key uint8 = 2
-	const keyCode int = 3
-	const releaseTime = 10 * time.Millisecond
-	const threshold = 30
-
 	ke.RegisterBasicPressAction(
 		evType,
 		channel,
-		key,
+		midiKey,
 		keyCode,
 		threshold,
 		releaseTime,
@@ -175,18 +176,18 @@ func TestBasicPress(t *testing.T) {
 
 	// Test that sending a MIDI event different from the expected doesn't set the key.
 	assert(t, kc[keyCode] == false, "Key was initially pressed")
-	sendMidiEvent(evType, channel, key+1, 100, conn, releaseTime)
+	sendMidiEvent(evType, channel, badKey, 100, conn, releaseTime)
 	time.Sleep(time.Millisecond)
 	assert(t, kc[keyCode] == false, "Key was pressed by an invalid MIDI event")
 
-	// Test that sending the event keeps the key pressed for the desired time.
+	// Test that sending the event keeps the keyCode pressed for the desired time.
 	assertKeyEvent(
 		t,
 		kc,
 		keyCode,
 		evType,
 		channel,
-		key,
+		midiKey,
 		100,
 		conn,
 		releaseTime,
@@ -196,6 +197,15 @@ func TestBasicPress(t *testing.T) {
 }
 
 func TestVelocityPress(t *testing.T) {
+	const evType = midi.EventNoteOn
+	const channel = 1
+	const midiKey = 2
+	const badKey = 3
+	const keyCode = 3
+	const minTime = 10 * time.Millisecond
+	const maxTime = 100 * time.Millisecond
+	const threshold = 0
+
 	conn := make(chan midi.MidiEvent, 1)
 	defer close(conn)
 	kc := make(mockKeyController)
@@ -205,18 +215,10 @@ func TestVelocityPress(t *testing.T) {
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
-	const evType = midi.EventNoteOn
-	const channel uint8 = 1
-	const key uint8 = 2
-	const keyCode int = 3
-	const minTime = 10 * time.Millisecond
-	const maxTime = 100 * time.Millisecond
-	const threshold = 0
-
 	ke.RegisterVelocityAction(
 		evType,
 		channel,
-		key,
+		midiKey,
 		keyCode,
 		threshold,
 		minTime,
@@ -225,18 +227,18 @@ func TestVelocityPress(t *testing.T) {
 
 	// Test that sending a MIDI event different from the expected doesn't set the key.
 	assert(t, kc[keyCode] == false, "Key was initially pressed")
-	sendMidiEvent(evType, channel, key+1, 100, conn, minTime)
+	sendMidiEvent(evType, channel, badKey, 100, conn, minTime)
 	time.Sleep(time.Millisecond)
 	assert(t, kc[keyCode] == false, "Key was pressed by an invalid MIDI event")
 
-	// Test that sending a quick MIDI event generates a quickly resolved key press.
+	// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
 	assertKeyEvent(
 		t,
 		kc,
 		keyCode,
 		evType,
 		channel,
-		key,
+		midiKey,
 		1,
 		conn,
 		minTime,
@@ -244,14 +246,14 @@ func TestVelocityPress(t *testing.T) {
 		time.Millisecond,
 	)
 
-	// Test that sending a long MIDI event generates a long-lasting key press.
+	// Test that sending a long MIDI event generates a long-lasting keyCode press.
 	assertKeyEvent(
 		t,
 		kc,
 		keyCode,
 		evType,
 		channel,
-		key,
+		midiKey,
 		128,
 		conn,
 		maxTime,
@@ -261,6 +263,16 @@ func TestVelocityPress(t *testing.T) {
 }
 
 func TestHoldPress(t *testing.T) {
+	const evType = midi.EventNoteOn
+	const channel = 1
+	const midiKey = 2
+	const badKey = 3
+	const keyCode = 3
+	const shortRelease = 10 * time.Millisecond
+	const maxDelayMs = 100
+	const eventDelay = 95 * time.Millisecond
+	const threshold = 30
+
 	conn := make(chan midi.MidiEvent, 1)
 	defer close(conn)
 	kc := make(mockKeyController)
@@ -270,19 +282,10 @@ func TestHoldPress(t *testing.T) {
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
-	const evType = midi.EventNoteOn
-	const channel uint8 = 1
-	const key uint8 = 2
-	const keyCode int = 3
-	const shortRelease = 10 * time.Millisecond
-	const maxDelayMs = 100
-	const eventDelay = 95 * time.Millisecond
-	const threshold = 30
-
 	ke.RegisterHoldAction(
 		evType,
 		channel,
-		key,
+		midiKey,
 		keyCode,
 		threshold,
 		maxDelayMs,
@@ -291,11 +294,11 @@ func TestHoldPress(t *testing.T) {
 
 	// Test that sending a MIDI event different from the expected doesn't set the key.
 	assert(t, kc[keyCode] == false, "Key was initially pressed")
-	sendMidiEvent(evType, channel, key+1, 100, conn, shortRelease)
+	sendMidiEvent(evType, channel, badKey, 100, conn, shortRelease)
 	time.Sleep(time.Millisecond)
 	assert(t, kc[keyCode] == false, "Key was pressed by an invalid MIDI event")
 
-	// Test that sending a quick MIDI event generates a quickly resolved key press.
+	// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
 	lastSend = time.Now().Add(-shortRelease - maxDelayMs*time.Millisecond)
 	assertKeyEvent(
 		t,
@@ -303,7 +306,7 @@ func TestHoldPress(t *testing.T) {
 		keyCode,
 		evType,
 		channel,
-		key,
+		midiKey,
 		100,
 		conn,
 		shortRelease,
@@ -311,7 +314,7 @@ func TestHoldPress(t *testing.T) {
 		time.Millisecond,
 	)
 
-	// Test that sending repeated MIDI events generates a long-lasting key press.
+	// Test that sending repeated MIDI events generates a long-lasting keyCode press.
 	const count = 5
 	const maxTime = eventDelay * count
 	go func() {
@@ -320,7 +323,7 @@ func TestHoldPress(t *testing.T) {
 
 		// Queue events roughly following the expected duration.
 		for i := 0; i < count; i++ {
-			sendMidiEvent(evType, channel, key, 100, conn, shortRelease)
+			sendMidiEvent(evType, channel, midiKey, 100, conn, shortRelease)
 			time.Sleep(eventDelay)
 		}
 	}()
@@ -331,7 +334,7 @@ func TestHoldPress(t *testing.T) {
 		keyCode,
 		evType,
 		channel,
-		key,
+		midiKey,
 		100,
 		conn,
 		maxTime,
@@ -341,6 +344,15 @@ func TestHoldPress(t *testing.T) {
 }
 
 func TestTogglePress(t *testing.T) {
+	const evType = midi.EventNoteOn
+	const channel = 1
+	const midiKey = 2
+	const badKey = 3
+	const keyCode = 3
+	const shortRelease = 10 * time.Millisecond
+	const threshold = 30
+	const toggleThreshold = 80
+
 	conn := make(chan midi.MidiEvent, 1)
 	defer close(conn)
 	kc := make(mockKeyController)
@@ -350,18 +362,10 @@ func TestTogglePress(t *testing.T) {
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
-	const evType = midi.EventNoteOn
-	const channel uint8 = 1
-	const key uint8 = 2
-	const keyCode int = 3
-	const shortRelease = 10 * time.Millisecond
-	const threshold = 30
-	const toggleThreshold = 80
-
 	ke.RegisterToggleAction(
 		evType,
 		channel,
-		key,
+		midiKey,
 		keyCode,
 		threshold,
 		toggleThreshold,
@@ -370,18 +374,18 @@ func TestTogglePress(t *testing.T) {
 
 	// Test that sending a MIDI event different from the expected doesn't set the key.
 	assert(t, kc[keyCode] == false, "Key was initially pressed")
-	sendMidiEvent(evType, channel, key+1, 100, conn, shortRelease)
+	sendMidiEvent(evType, channel, badKey, 100, conn, shortRelease)
 	time.Sleep(time.Millisecond)
 	assert(t, kc[keyCode] == false, "Key was pressed by an invalid MIDI event")
 
-	// Test that sending a quick MIDI event generates a quickly resolved key press.
+	// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
 	assertKeyEvent(
 		t,
 		kc,
 		keyCode,
 		evType,
 		channel,
-		key,
+		midiKey,
 		toggleThreshold-1,
 		conn,
 		shortRelease,
@@ -389,13 +393,13 @@ func TestTogglePress(t *testing.T) {
 		time.Millisecond,
 	)
 
-	// Test that sending a long MIDI event holds the key down
+	// Test that sending a long MIDI event holds the keyCode down
 	// until the event is sent again.
 	const maxTime = time.Millisecond * 100
 	go func() {
 		// Queue an event to be sent after maxTime.
 		time.Sleep(maxTime)
-		sendMidiEvent(evType, channel, key, toggleThreshold, conn, shortRelease)
+		sendMidiEvent(evType, channel, midiKey, toggleThreshold, conn, shortRelease)
 	}()
 
 	assertKeyEvent(
@@ -404,7 +408,7 @@ func TestTogglePress(t *testing.T) {
 		keyCode,
 		evType,
 		channel,
-		key,
+		midiKey,
 		toggleThreshold+1,
 		conn,
 		maxTime,
