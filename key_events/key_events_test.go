@@ -437,3 +437,110 @@ func TestTogglePress(t *testing.T) {
 		time.Millisecond*5,
 	)
 }
+
+func TestHoldMultiKeys(t *testing.T) {
+	const evType = midi.EventNoteOn
+	const channel = 1
+	const badKey = 2
+	const midiKey1 = 3
+	const midiKey2 = 4
+	const keyCode = 5
+	const shortRelease = 10 * time.Millisecond
+	const maxDelayMs = 100
+	const eventDelay = 95 * time.Millisecond
+	const threshold = 30
+
+	conn := make(chan midi.MidiEvent, 1)
+	defer close(conn)
+	kc := NewMockKeyController(keyCode)
+	defer kc.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false)
+	assert(t, err == nil, "Failed to start the key event generator")
+	defer ke.Close()
+
+	ke.RegisterHoldAction(
+		evType,
+		channel,
+		midiKey1,
+		keyCode,
+		threshold,
+		maxDelayMs,
+		shortRelease,
+	)
+	ke.RegisterHoldAction(
+		evType,
+		channel,
+		midiKey2,
+		keyCode,
+		threshold,
+		maxDelayMs,
+		shortRelease,
+	)
+
+	// Test that sending a MIDI event different from the expected doesn't set the keyCode.
+	sendMidiEvent(evType, channel, badKey, 100, conn)
+	select {
+	case <-kc[keyCode].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-time.After(time.Millisecond):
+		// Key wasn't pressed, as expected!
+	}
+
+	// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
+	lastSend = time.Now().Add(-shortRelease - maxDelayMs*time.Millisecond)
+	assertKeyEvent(
+		t,
+		kc,
+		keyCode,
+		evType,
+		channel,
+		midiKey1,
+		100,
+		conn,
+		shortRelease,
+		time.Millisecond,
+	)
+
+	lastSend = time.Now().Add(-shortRelease - maxDelayMs*time.Millisecond)
+	assertKeyEvent(
+		t,
+		kc,
+		keyCode,
+		evType,
+		channel,
+		midiKey2,
+		100,
+		conn,
+		shortRelease,
+		time.Millisecond,
+	)
+
+	// Test that sending repeated MIDI events generates a long-lasting keyCode press.
+	const count = 5
+	const maxTime = eventDelay * count
+	go func() {
+		midiKeys := []uint8{midiKey1, midiKey2}
+
+		// Queue events roughly following the expected duration,
+		// but alternating between the two MIDI events.
+		for i := 0; i < count; i++ {
+			midiKey := midiKeys[i&1]
+			sendMidiEvent(evType, channel, midiKey, 100, conn)
+			time.Sleep(eventDelay)
+		}
+	}()
+
+	assertKeyEvent(
+		t,
+		kc,
+		keyCode,
+		evType,
+		channel,
+		midiKey2,
+		100,
+		conn,
+		maxTime,
+		time.Millisecond*10,
+	)
+}
