@@ -102,9 +102,7 @@ func (key *keyAction) waitForTimedAction() {
 		}
 		key.releaseChannel <- key.release
 
-		key.mutex.Lock()
-		key.timer.Stop()
-		key.mutex.Unlock()
+		key.stopTimer()
 	}
 }
 
@@ -124,9 +122,7 @@ func (key *keyAction) Close() error {
 
 	// Stop and close the ticker, so it won't be triggered and
 	// so the timer goroutine may exit.
-	key.mutex.Lock()
-	key.timer.Stop()
-	key.mutex.Unlock()
+	key.stopTimer()
 	close(key.stop)
 
 	// Make sure that the ticker is empty.
