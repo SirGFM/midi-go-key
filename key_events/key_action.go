@@ -17,15 +17,19 @@ type keyAction struct {
 	mutex sync.Mutex
 	// The action taken when the timer expires, if any.
 	onTimeout timerAction
+	// Queue release actions on the main thread,
+	releaseChannel chan timerAction
 	// Channel used to signal that the action's timer should be stopped forever.
 	stop chan struct{}
 }
 
 // newKeyAction creates a new keyAction, with its timer already configured (but stopped).
+// When the timer expires, the release action is sent on releaseChannel.
 // onTimeout may be nil if no custom action is required after releasing the key.
 func newKeyAction(
 	keyCode int,
 	kc KeyController,
+	releaseChannel chan timerAction,
 	onTimeout timerAction,
 ) *keyAction {
 	action := &keyAction{
@@ -33,6 +37,7 @@ func newKeyAction(
 		kc:             kc,
 		timer:          time.NewTicker(time.Second),
 		onTimeout:      onTimeout,
+		releaseChannel: releaseChannel,
 		stop:           make(chan struct{}),
 	}
 	action.timer.Stop()
@@ -79,7 +84,7 @@ func (key *keyAction) waitForTimedAction() {
 		case <-key.timer.C:
 			// Do nothing and just exits the select.
 		}
-		key.release()
+		key.releaseChannel <- key.release
 
 		key.mutex.Lock()
 		key.timer.Stop()

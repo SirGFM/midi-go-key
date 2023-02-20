@@ -197,7 +197,7 @@ func (kbEv *keyEvents) newKeyAction(keyCode int, onTimeout timerAction) *keyActi
 		return action
 	}
 
-	action := newKeyAction(keyCode, kbEv.kc, onTimeout)
+	action := newKeyAction(keyCode, kbEv.kc, kbEv.timedAction, onTimeout)
 	kbEv.keyActions[keyCode] = action
 	return action
 }
