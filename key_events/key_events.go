@@ -245,16 +245,8 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 
 	kbEv.removeAction(event)
 
-	// Stores the key state between the functions.
-	isPressed := false
-
-	// Create the onRelease function, which simply resets isPressed.
-	onTimeout := func() {
-		isPressed = false
-	}
-
 	// Create a new key handler and start its timer.
-	keyAction := kbEv.newKeyAction(keyCode, onTimeout)
+	keyAction := kbEv.newKeyAction(keyCode, nil)
 
 	// Register the onPress function.
 	action := func(ev midi.MidiEvent) {
@@ -275,15 +267,13 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 		onPress := func() {
 			keyAction.Press()
 
-			isPressed = true
-
 			keyAction.QueueTimedAction(releaseTime)
 		}
 
-		if isPressed {
+		if keyAction.IsPressed() {
 			// If the key was already pressed,
 			// release it momentarily and then press it again.
-			kbEv.kc.ReleaseKeys(keyCode)
+			keyAction.Release()
 
 			go func() {
 				time.Sleep(time.Millisecond)
@@ -310,16 +300,8 @@ func (kbEv *keyEvents) RegisterToggleAction(
 
 	kbEv.removeAction(event)
 
-	// Stores the key state between the functions.
-	isPressed := false
-
-	// Create the onRelease function, which simply resets isPressed.
-	onTimeout := func() {
-		isPressed = false
-	}
-
 	// Create a new key handler and start its timer.
-	keyAction := kbEv.newKeyAction(keyCode, onTimeout)
+	keyAction := kbEv.newKeyAction(keyCode, nil)
 
 	// Register the onPress function.
 	action := func(ev midi.MidiEvent) {
@@ -327,17 +309,12 @@ func (kbEv *keyEvents) RegisterToggleAction(
 			return
 		}
 
-		if isPressed {
+		if keyAction.IsPressed() {
 			// If it is pressed, simply release it.
-			kbEv.kc.ReleaseKeys(keyCode)
-
-			isPressed = false
-			keyAction.UnqueueTimedAction()
+			keyAction.Release()
 		} else {
 			// Otherwise, simply toggle it on.
 			keyAction.Press()
-
-			isPressed = true
 
 			// If the hit was bellow the threshold,
 			// simply do a quick press.

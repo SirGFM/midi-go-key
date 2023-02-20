@@ -21,6 +21,8 @@ type keyAction struct {
 	releaseChannel chan timerAction
 	// Channel used to signal that the action's timer should be stopped forever.
 	stop chan struct{}
+	// The key's current state.
+	isPressed bool
 }
 
 // newKeyAction creates a new keyAction, with its timer already configured (but stopped).
@@ -46,21 +48,35 @@ func newKeyAction(
 	return action
 }
 
+// IsPressed returns whether the key is currently pressed or not.
+func (key *keyAction) IsPressed() bool {
+	return key.isPressed
+}
+
 // Press presses the keyCode.
 func (key *keyAction) Press() {
+	key.isPressed = true
 	key.kc.PressKeys(key.keyCode)
+}
+
+// Release the key and pauses its timer.
+func (key *keyAction) Release() {
+	key.stopTimer()
+	key.release()
 }
 
 // release gets called automatically when key.timer expires.
 func (key *keyAction) release() {
+	key.isPressed = false
 	key.kc.ReleaseKeys(key.keyCode)
 	if key.onTimeout != nil {
 		key.onTimeout()
 	}
 }
 
-// UnqueueTimedAction releases the timeout from an action.
-func (key *keyAction) UnqueueTimedAction() {
+// stopTimer releases the timeout from an action.
+// This function is thread safe!
+func (key *keyAction) stopTimer() {
 	key.mutex.Lock()
 	key.timer.Stop()
 	key.mutex.Unlock()
