@@ -7,8 +7,8 @@ import (
 
 // An action responsible for pressing/releasing a key.
 type keyAction struct {
-	// The key to be pressed/released.
-	keyCode int
+	// The keys to be pressed/released.
+	keyCodes []int
 	// The internal key controller.
 	kc KeyController
 	// The timer used to release the generated key press.
@@ -34,8 +34,26 @@ func newKeyAction(
 	releaseChannel chan timerAction,
 	onTimeout timerAction,
 ) *keyAction {
+	return newKeyActionMulti(
+		[]int{keyCode},
+		kc,
+		releaseChannel,
+		onTimeout,
+	)
+}
+
+// newKeyActionMulti creates a new keyAction for multiple keys,
+// with its timer already configured (but stopped).
+// When the timer expires, the release action is sent on releaseChannel.
+// onTimeout may be nil if no custom action is required after releasing the keys.
+func newKeyActionMulti(
+	keyCodes []int,
+	kc KeyController,
+	releaseChannel chan timerAction,
+	onTimeout timerAction,
+) *keyAction {
 	action := &keyAction{
-		keyCode:        keyCode,
+		keyCodes:       keyCodes,
 		kc:             kc,
 		timer:          time.NewTicker(time.Second),
 		onTimeout:      onTimeout,
@@ -56,7 +74,7 @@ func (key *keyAction) IsPressed() bool {
 // Press presses the keyCode.
 func (key *keyAction) Press() {
 	key.isPressed = true
-	key.kc.PressKeys(key.keyCode)
+	key.kc.PressKeys(key.keyCodes...)
 }
 
 // Release the key and pauses its timer.
@@ -68,7 +86,7 @@ func (key *keyAction) Release() {
 // release gets called automatically when key.timer expires.
 func (key *keyAction) release() {
 	key.isPressed = false
-	key.kc.ReleaseKeys(key.keyCode)
+	key.kc.ReleaseKeys(key.keyCodes...)
 	if key.onTimeout != nil {
 		key.onTimeout()
 	}
