@@ -13,6 +13,9 @@ type midiAction func(midi.MidiEvent)
 // How many timed actions may be queued at once.
 const timedActionQueueSize = 64
 
+// Value used to identify an event bound to multiple keyboard keys.
+const multiKey = 0x8000000000000000
+
 // Controls the keyboard by pressing and releasing keys.
 type KeyController interface {
 	// Releases every resource associated with the key controller.
@@ -108,7 +111,7 @@ type keyEvents struct {
 	// List actions taken in response to the registered actions.
 	actions map[noteEvent]midiAction
 	// List actions responsible for pressing/releasing keys.
-	keyActions map[int]*keyAction
+	keyActions map[uint64]*keyAction
 	// Receive actions that should be generated based on a timer.
 	timedAction chan timerAction
 	// Whether unhandled events should be logged.
@@ -122,7 +125,7 @@ func NewKeyEvents(kc KeyController, conn <-chan midi.MidiEvent, logUnhandled boo
 		kc:           kc,
 		conn:         conn,
 		actions:      make(map[noteEvent]midiAction),
-		keyActions:   make(map[int]*keyAction),
+		keyActions:   make(map[uint64]*keyAction),
 		timedAction:  make(chan timerAction, timedActionQueueSize),
 		logUnhandled: logUnhandled,
 	}
@@ -193,12 +196,40 @@ func (kbEv *keyEvents) removeAction(event noteEvent) {
 //
 // This function isn't thread safe and should be called before any event is received.
 func (kbEv *keyEvents) newKeyAction(keyCode int, onTimeout timerAction) *keyAction {
-	if action, ok := kbEv.keyActions[keyCode]; ok {
+	if action, ok := kbEv.keyActions[uint64(keyCode)]; ok {
 		return action
 	}
 
 	action := newKeyAction(keyCode, kbEv.kc, kbEv.timedAction, onTimeout)
-	kbEv.keyActions[keyCode] = action
+	kbEv.keyActions[uint64(keyCode)] = action
+	return action
+}
+
+// newKeyActionMulti creates a new keyAction for multiple keys, with its timer already configured (but stopped).
+// If an action has already been registered for that keyCode,
+// then that first action will be returned instead.
+//
+// This function isn't thread safe and should be called before any event is received.
+// Also, keyCodes must have at most 4 keys.
+func (kbEv *keyEvents) newKeyActionMulti(keyCodes []int, onTimeout timerAction) *keyAction {
+	if len(keyCodes) > 4 {
+		panic("multi actions can act on at most 4 keys")
+	}
+
+	code := uint64(0)
+	if len(keyCodes) > 1 {
+		code = multiKey
+	}
+	for i, key := range keyCodes {
+		code |= uint64(key << (i * 16))
+	}
+
+	if action, ok := kbEv.keyActions[code]; ok {
+		return action
+	}
+
+	action := newKeyActionMulti(keyCodes, kbEv.kc, kbEv.timedAction, onTimeout)
+	kbEv.keyActions[code] = action
 	return action
 }
 
