@@ -11,7 +11,7 @@ import (
 func main() {
 	names := flag.String("keys", "SPACE,A", "the keys to be pressed, separated by commas")
 	delay := flag.Duration("delay", 0, "delay until the key is pressed")
-	hold := flag.Duration("hold", time.Second / 2, "for how long the key should be pressed")
+	hold := flag.Duration("hold", time.Second/2, "for how long the key should be pressed")
 	flag.Parse()
 
 	var keys []int
