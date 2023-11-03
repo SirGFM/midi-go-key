@@ -546,3 +546,194 @@ func TestHoldMultiKeys(t *testing.T) {
 		time.Millisecond*30,
 	)
 }
+
+func TestRepeatSequence(t *testing.T) {
+	const evType = midi.EventNoteOn
+	const channel = 1
+	const midiPress = 2
+	const midiNext = 3
+	const midiPrev = 4
+	const midiReset = 5
+	const midiInvalid = 6
+	keyCodes := [][]int{
+		[]int{7},
+		[]int{8, 9},
+		[]int{10},
+		[]int{11},
+	}
+	const shortRelease = 10 * time.Millisecond
+	const maxDelayMs = 100
+	const eventDelay = 95 * time.Millisecond
+	const threshold = 30
+
+	conn := make(chan midi.MidiEvent, 1)
+	defer close(conn)
+
+	var keys []int
+	for _, kcs := range keyCodes {
+		for _, key := range kcs {
+			keys = append(keys, key)
+		}
+	}
+	kc := NewMockKeyController(keys...)
+	defer kc.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false)
+	assert(t, err == nil, "Failed to start the key event generator")
+	defer ke.Close()
+
+	ke.RegisterSequenceHoldAction(
+		evType,
+		channel,
+		midiPress,
+		keyCodes,
+		threshold,
+		maxDelayMs,
+		shortRelease,
+		midiPrev,
+		midiNext,
+		midiReset,
+	)
+
+	// Test that sending a MIDI event different from the expected doesn't set the keyCode.
+	sendMidiEvent(evType, channel, midiInvalid, 100, conn)
+	select {
+	case <-kc[7].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-kc[8].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-kc[9].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-kc[10].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-kc[11].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-time.After(time.Millisecond):
+		// Key wasn't pressed, as expected!
+	}
+
+	// testPress checks that the desired key was pressed.
+	testPress := func(want int) {
+		// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
+		assertKeyEvent(
+			t,
+			kc,
+			want,
+			evType,
+			channel,
+			midiPress,
+			100,
+			conn,
+			shortRelease,
+			time.Millisecond,
+		)
+
+		// Test that sending repeated MIDI events generates a long-lasting keyCode press.
+		const count = 5
+		const maxTime = eventDelay * count
+		go func() {
+			// Queue events roughly following the expected duration.
+			for i := 0; i < count; i++ {
+				sendMidiEvent(evType, channel, midiPress, 100, conn)
+				time.Sleep(eventDelay)
+			}
+		}()
+
+		assertKeyEvent(
+			t,
+			kc,
+			want,
+			evType,
+			channel,
+			midiPress,
+			100,
+			conn,
+			maxTime,
+			time.Millisecond*10,
+		)
+	}
+
+	// Try sending an event to press the initial key.
+	testPress(keyCodes[0][0])
+
+	// Move back to the last key and test again.
+	sendMidiEvent(evType, channel, midiPrev, 100, conn)
+	time.Sleep(eventDelay)
+	testPress(keyCodes[3][0])
+
+	// Move back another time and test again.
+	sendMidiEvent(evType, channel, midiPrev, 100, conn)
+	time.Sleep(eventDelay)
+	testPress(keyCodes[2][0])
+
+	// Reset back to the start and test again.
+	sendMidiEvent(evType, channel, midiReset, 100, conn)
+	time.Sleep(eventDelay)
+	testPress(keyCodes[0][0])
+
+	// Advance to the second step (that presses two keys).
+	sendMidiEvent(evType, channel, midiNext, 100, conn)
+	time.Sleep(eventDelay)
+	sendMidiEvent(evType, channel, midiPress, 100, conn)
+
+	// These checks must be manual
+	// because otherwise the channel that reports that a key was pressed
+	// ends up getting blocked.
+
+	// Check that the keyCode were pressed.
+	pressDeadline := time.After(time.Millisecond)
+	releaseDeadline := time.After(shortRelease + 10*time.Millisecond)
+	held := time.After(shortRelease - 10*time.Millisecond)
+	select {
+	case <-pressDeadline:
+	case pressed := <-kc[keyCodes[1][0]].newState:
+		if !pressed {
+			debug.PrintStack()
+			t.Fatalf("keyCode wasn't pressed in time")
+		}
+	}
+
+	select {
+	case <-pressDeadline:
+	case pressed := <-kc[keyCodes[1][1]].newState:
+		if !pressed {
+			debug.PrintStack()
+			t.Fatalf("keyCode wasn't pressed in time")
+		}
+	}
+
+	// Check that the keyCode were released.
+	select {
+	case <-kc[keyCodes[1][0]].newState:
+		debug.PrintStack()
+		t.Fatalf("keyCode was released early")
+	case <-kc[keyCodes[1][1]].newState:
+		debug.PrintStack()
+		t.Fatalf("keyCode was released early")
+	case <-held:
+		// Key was held down for as long as desired!
+	}
+
+	// Check that the keyCode was release in time.
+	select {
+	case <-releaseDeadline:
+		debug.PrintStack()
+		t.Fatalf("failed to detect that the keyCode was released in time")
+	case pressed := <-kc[keyCodes[1][0]].newState:
+		if pressed {
+			debug.PrintStack()
+			t.Fatalf("keyCode wasn't released in time")
+		}
+	}
+
+	select {
+	case <-releaseDeadline:
+		debug.PrintStack()
+		t.Fatalf("failed to detect that the keyCode was released in time")
+	case pressed := <-kc[keyCodes[1][1]].newState:
+		if pressed {
+			debug.PrintStack()
+			t.Fatalf("keyCode wasn't released in time")
+		}
+	}
+}

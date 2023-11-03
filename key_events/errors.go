@@ -30,6 +30,8 @@ const (
 	ErrConfigThresholdTokenMissing
 	// Invalid event, must be a value between 0 and 255
 	ErrConfigThresholdInvalid
+	// The parsed value was ignored
+	ErrConfigIgnored
 )
 
 // Implements the 'error' interface for 'errCode'.
@@ -61,6 +63,8 @@ func (e errCode) Error() string {
 		return `(key_events) missing token "thres=" for threshold`
 	case ErrConfigThresholdInvalid:
 		return "(key_events) invalid event, must be a value between 0 and 255"
+	case ErrConfigIgnored:
+		return "(key_events) the parsed value was ignored"
 	default:
 		return "(key_events) unknown error"
 	}

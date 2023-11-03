@@ -2,6 +2,8 @@ package key_events
 
 import (
 	"bufio"
+	"errors"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -13,10 +15,11 @@ import (
 
 // List how many arguments each action has
 var actionsToArgCount = map[string]int{
-	"BASIC":    1,
-	"VELOCITY": 2,
-	"TOGGLE":   2,
-	"REPEAT":   2,
+	"BASIC":           1,
+	"VELOCITY":        2,
+	"TOGGLE":          2,
+	"REPEAT":          2,
+	"REPEAT-SEQUENCE": 6,
 }
 
 // The minimum number of arguments in a line.
@@ -25,8 +28,12 @@ const minArgs = 5
 // getInt reads an integer from arg, removing the prefix from the start.
 // badTokeErr is returned if the prefix is invalid, and invalidErr
 // if the value isn't an integer.
+//
+// If the value starts with 'str=', then it simply is ignored and ErrConfigIgnored is returned.
 func getInt(arg, prefix string, badTokenErr, invalidErr error) (int, error) {
-	if !strings.HasPrefix(arg, prefix) {
+	if strings.HasPrefix(arg, "str=") {
+		return 0, ErrConfigIgnored
+	} else if !strings.HasPrefix(arg, prefix) {
 		return 0, badTokenErr
 	}
 
@@ -105,7 +112,9 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 		var numArgs []int
 		for _, arg := range args[minArgs:] {
 			num, err := getInt(arg, "", nil, ErrConfigActionArgumentInvalid)
-			if err != nil {
+			if errors.Is(err, ErrConfigIgnored) {
+				// Simply ignore errors if the value was ignored.
+			} else if err != nil {
 				return err
 			} else if num <= 0 {
 				return ErrConfigActionArgumentInvalid
@@ -175,6 +184,40 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 				threshold,
 				maxRepeatDelayMs,
 				shortRelease,
+			)
+		case "REPEAT-SEQUENCE":
+			maxRepeatDelayMs := int32(numArgs[0])
+			shortRelease := time.Duration(numArgs[1]) * time.Millisecond
+			backwardEv := uint8(numArgs[2])
+			forwardEv := uint8(numArgs[3])
+			resetEv := uint8(numArgs[4])
+
+			keySequence := [][]int{[]int{key}}
+			sequence := strings.TrimPrefix(args[len(args)-1], "str=")
+			for _, keys := range strings.Split(sequence, ";") {
+				var newSequence []int
+				for _, name := range strings.Split(keys, ",") {
+					key, ok := keyNameToInt[strings.ToUpper(name)]
+					if !ok {
+						log.Printf("invalid key: '%s'", name)
+						return ErrConfigKeyInvalid
+					}
+					newSequence = append(newSequence, key)
+				}
+				keySequence = append(keySequence, newSequence)
+			}
+
+			kbEv.RegisterSequenceHoldAction(
+				midi.EventNoteOn,
+				ch,
+				ev,
+				keySequence,
+				threshold,
+				maxRepeatDelayMs,
+				shortRelease,
+				backwardEv,
+				forwardEv,
+				resetEv,
 			)
 		default:
 			return ErrConfigActionInvalid

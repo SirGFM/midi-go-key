@@ -34,7 +34,8 @@ This application allows mapping MIDI events into four different types of actions
 - Basic press: A simple key press followed by the key release shortly thereafter;
 - Velocity-based press: A key press of variable hold type, calculated based on in velocity of the MIDI event;
 - Toggle: Toggle a key between pressed and released whenever the MIDI event is generated. Additionally, if the event velocity is lower than a limit, a Basic Press is done instead;
-- Repeated hold: Holds the key down while the MIDI event is repeated quickly.
+- Repeated hold: Holds the key down while the MIDI event is repeated quickly;
+- Repeated Sequence: Use a MIDI event to press the current key, two MIDI events to move forward and backward in the sequence, and on MIDI event to reset back to the first key. This otherwise behaves like a Repeated hold.
 
 These actions must be configured through the following script:
 
@@ -60,6 +61,15 @@ ch=9 ev=44 key=C thres=0 TOGGLE 75 10
 # The first input in a sequence is ignored if its velocity is less than 20 (considering that it goes from 0 to 128),
 # but the following ones may be as light as you want.
 ch=9 ev=0x30 key=D thres=20 REPEAT 100 10
+
+# Do a Repeated hold on a Sequence of inputs on MIDI event 45 (i.e., hex 2d),
+# holding the current key down if the event is repeated every 100 milliseconds.
+# On the first (or only) event, the key is released after 10 milliseconds.
+# The sequence starts on the named parameter 'key' (i.e., the up arrow key), and advances clockwise
+# (thus, up/right, right, right/down, etc) whenever the MIDI event 43 (i.e., hex 2b) is received.
+# If the MIDI event 48 (i.e., hex 30) is received instead, the sequence moves counter-clockwise.
+# Additionally, MIDI event 38 (i.e., hex 26) can be used to reset back to the initial key (i.e., the up arrow key).
+ch=9 ev=0x2d key=UP thres=20 REPEAT-SEQUENCE 100 10 0x30 0x2b 0x26 str=UP,RIGHT;RIGHT;RIGHT,DOWN;DOWN;DOWN,LEFT;LEFT;LEFT,UP
 ```
 
 Numbers may be written in any format, as long as they are properly prefixed.

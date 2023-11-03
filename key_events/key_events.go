@@ -92,6 +92,31 @@ type KeyEvents interface {
 		shortRelease time.Duration,
 	)
 
+	// RegisterSequenceHoldAction registers an action that stays pressed
+	// as long as the MIDI event is repeated.
+	// However, the actual pressed key is picked from keyCodes,
+	// advancing to the next one on MIDI event nextKeyCode,
+	// moving back to the previous one on MIDI event prevKeyCode,
+	// and resetting back to the start on MIDI event resetKeyCode.
+	// If the MIDI event hasn't been sent in maxRepeatDelayMs,
+	// then the key will be released after shortRelease.
+	// Otherwise, it will stay pressed for maxRepeatDelayMs
+	// of the last event.
+	// The first of a series of repeated inputs
+	// is ignored if it's less than or equal to the threshold.
+	RegisterSequenceHoldAction(
+		evType midi.MidiEventType,
+		channel,
+		key uint8,
+		keyCodes [][]int,
+		threshold uint8,
+		maxRepeatDelayMs int32,
+		shortRelease time.Duration,
+		prevKeyCode,
+		nextKeyCode,
+		resetKeyCode uint8,
+	)
+
 	// ReadConfig reads the configuration file in path and registers the listed actions.
 	ReadConfig(path string) error
 }
@@ -400,4 +425,102 @@ func (kbEv *keyEvents) RegisterHoldAction(
 	}
 
 	kbEv.actions[event] = action
+}
+
+func (kbEv *keyEvents) RegisterSequenceHoldAction(
+	evType midi.MidiEventType,
+	channel,
+	key uint8,
+	keyCodes [][]int,
+	threshold uint8,
+	maxRepeatDelayMs int32,
+	shortRelease time.Duration,
+	prevKeyCode,
+	nextKeyCode,
+	resetKeyCode uint8,
+) {
+	pressEvent := generateNoteEvent(evType, channel, key)
+	kbEv.removeAction(pressEvent)
+
+	prevEvent := generateNoteEvent(evType, channel, prevKeyCode)
+	kbEv.removeAction(prevEvent)
+
+	nextEvent := generateNoteEvent(evType, channel, nextKeyCode)
+	kbEv.removeAction(nextEvent)
+
+	resetEvent := generateNoteEvent(evType, channel, resetKeyCode)
+	kbEv.removeAction(resetEvent)
+
+	// Create a new key handler for each step in the sequence and start their timers.
+	var actions []*keyAction
+	for _, keys := range keyCodes {
+		actions = append(actions, kbEv.newKeyActionMulti(keys, nil))
+	}
+	// Set the first action as the active one.
+	cur := 0
+
+	// Stores the last time the MIDI event was received.
+	var lastTimestamp int32
+
+	// Register the onPress function for activating the current key.
+	pressAction := func(ev midi.MidiEvent) {
+		keyAction := actions[cur]
+
+		wasPressed := (ev.Timestamp-lastTimestamp > maxRepeatDelayMs)
+
+		if ev.Type != midi.EventNoteOn || ev.Velocity == 0 || (!wasPressed && ev.Velocity <= threshold) {
+			return
+		}
+
+		keyAction.Press()
+
+		// If the event was sent quickly enough,
+		// requeue the action for a longer time.
+		// Otherwise, simply send a quick action.
+		if wasPressed {
+			keyAction.QueueTimedAction(shortRelease)
+		} else {
+			keyAction.QueueTimedAction(time.Duration(maxRepeatDelayMs) * time.Millisecond)
+		}
+
+		lastTimestamp = ev.Timestamp
+	}
+
+	// Register the onPress function for going back to the previous input.
+	prevAction := func(ev midi.MidiEvent) {
+		if ev.Type != midi.EventNoteOn || ev.Velocity <= threshold {
+			return
+		}
+
+		cur--
+		if cur < 0 {
+			cur = len(actions) - 1
+		}
+	}
+
+	// Register the onPress function for advancing to the next input.
+	nextAction := func(ev midi.MidiEvent) {
+		if ev.Type != midi.EventNoteOn || ev.Velocity <= threshold {
+			return
+		}
+
+		cur++
+		if cur >= len(actions) {
+			cur = 0
+		}
+	}
+
+	// Register the onPress function for going to the start of the sequence.
+	resetAction := func(ev midi.MidiEvent) {
+		if ev.Type != midi.EventNoteOn || ev.Velocity <= threshold {
+			return
+		}
+
+		cur = 0
+	}
+
+	kbEv.actions[pressEvent] = pressAction
+	kbEv.actions[nextEvent] = nextAction
+	kbEv.actions[prevEvent] = prevAction
+	kbEv.actions[resetEvent] = resetAction
 }
