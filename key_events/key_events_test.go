@@ -65,8 +65,10 @@ func assert(t *testing.T, condition bool, fmt string, args ...interface{}) {
 	}
 }
 
-// The last time an event was sent, for the event timestamp.
-var lastSend = time.Now()
+// The time when the test started, for calculating the event timestamp.
+// This time is set to the past, so every first timestamp in a test
+// shall be a large, non-zero value.
+var startTime = time.Now().Add(-time.Minute)
 
 // sendMidiEvent sends a dummy MIDI event to conn,
 // returning the expected event deadline.
@@ -78,7 +80,7 @@ func sendMidiEvent(
 	conn chan midi.MidiEvent,
 ) {
 	now := time.Now()
-	timestamp := now.Sub(lastSend) / time.Millisecond
+	timestamp := now.Sub(startTime) / time.Millisecond
 	if timestamp > 0xffffffff {
 		panic("timestamp extrapolated an int32")
 	}
@@ -93,9 +95,6 @@ func sendMidiEvent(
 		Key:       midiKey,
 		Velocity:  velocity,
 	}
-
-	// Update the last send date.
-	lastSend = now
 }
 
 // assertKeyEvent sends a MIDI event of the supplied on conn,
@@ -324,7 +323,6 @@ func TestHoldPress(t *testing.T) {
 	}
 
 	// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
-	lastSend = time.Now().Add(-shortRelease - maxDelayMs*time.Millisecond)
 	assertKeyEvent(
 		t,
 		kc,
@@ -488,7 +486,6 @@ func TestHoldMultiKeys(t *testing.T) {
 	}
 
 	// Test that sending a quick MIDI event generates a quickly resolved keyCode press.
-	lastSend = time.Now().Add(-shortRelease - maxDelayMs*time.Millisecond)
 	assertKeyEvent(
 		t,
 		kc,
@@ -502,7 +499,6 @@ func TestHoldMultiKeys(t *testing.T) {
 		time.Millisecond,
 	)
 
-	lastSend = time.Now().Add(-shortRelease - maxDelayMs*time.Millisecond)
 	assertKeyEvent(
 		t,
 		kc,
@@ -517,8 +513,9 @@ func TestHoldMultiKeys(t *testing.T) {
 	)
 
 	// Test that sending repeated MIDI events generates a long-lasting keyCode press.
-	const count = 5
-	const maxTime = eventDelay * count
+	const alternatedDelay = eventDelay / 2
+	const count = 10
+	const maxTime = alternatedDelay * count
 	go func() {
 		midiKeys := []uint8{midiKey1, midiKey2}
 
@@ -527,7 +524,7 @@ func TestHoldMultiKeys(t *testing.T) {
 		for i := 0; i < count; i++ {
 			midiKey := midiKeys[i&1]
 			sendMidiEvent(evType, channel, midiKey, 100, conn)
-			time.Sleep(eventDelay)
+			time.Sleep(alternatedDelay)
 		}
 	}()
 
@@ -541,6 +538,6 @@ func TestHoldMultiKeys(t *testing.T) {
 		100,
 		conn,
 		maxTime,
-		time.Millisecond*10,
+		time.Millisecond*30,
 	)
 }
