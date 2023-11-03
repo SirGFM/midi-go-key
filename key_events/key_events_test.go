@@ -122,9 +122,11 @@ func assertKeyEvent(
 	// Check that the keyCode was pressed.
 	select {
 	case <-time.After(time.Millisecond / 2):
+		debug.PrintStack()
 		t.Fatalf("failed to detect that the keyCode was pressed in time")
 	case pressed := <-kc[keyCode].newState:
 		if !pressed {
+			debug.PrintStack()
 			t.Fatalf("keyCode wasn't pressed in time")
 		}
 	}
@@ -132,6 +134,7 @@ func assertKeyEvent(
 	// Check that the keyCode was held for long enough.
 	select {
 	case <-kc[keyCode].newState:
+		debug.PrintStack()
 		t.Fatalf("keyCode was released early")
 	case <-held:
 		// Key was held down for as long as desired!
@@ -140,9 +143,11 @@ func assertKeyEvent(
 	// Check that the keyCode was release in time.
 	select {
 	case <-deadline:
+		debug.PrintStack()
 		t.Fatalf("failed to detect that the keyCode was released in time")
 	case pressed := <-kc[keyCode].newState:
 		if pressed {
+			debug.PrintStack()
 			t.Fatalf("keyCode wasn't released in time")
 		}
 		return
