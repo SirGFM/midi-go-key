@@ -6,6 +6,8 @@ import (
 
 // Maps each key name to its value.
 var keyNameToInt = map[string]int{
+	"NONE": -1,
+
 	"UP":    keybd_event.VK_UP,
 	"DOWN":  keybd_event.VK_DOWN,
 	"LEFT":  keybd_event.VK_LEFT,

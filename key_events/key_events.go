@@ -117,8 +117,25 @@ type KeyEvents interface {
 		resetKeyCode uint8,
 	)
 
+	// RegisterMapSwap registers an action that swaps the currently active named set.
+	// This expects the first set to be already active when this function is called,
+	// and thus it initially swaps to the second set.
+	RegisterMapSwap(
+		evType midi.MidiEventType,
+		channel,
+		key uint8,
+		threshold uint8,
+		namedSets []string,
+	)
+
 	// ReadConfig reads the configuration file in path and registers the listed actions.
 	ReadConfig(path string) error
+
+	// SetNamedSet configures the active named set.
+	SetNamedSet(name string)
+
+	// RegisterNamedSet creates a new named set and activates it.
+	RegisterNamedSet(name string)
 }
 
 // A MIDI event generated for a given note,
@@ -164,6 +181,15 @@ func NewKeyEvents(kc KeyController, conn <-chan midi.MidiEvent, logUnhandled boo
 	go kbEv.run()
 
 	return kbEv, nil
+}
+
+func (kbEv *keyEvents) SetNamedSet(name string) {
+	kbEv.curSet = name
+}
+
+func (kbEv *keyEvents) RegisterNamedSet(name string) {
+	kbEv.namedSets[name] = make(actionSet)
+	kbEv.curSet = name
 }
 
 func (kbEv *keyEvents) Close() error {
@@ -567,4 +593,33 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 	kbEv.registerAction(nextEvent, nextAction)
 	kbEv.registerAction(prevEvent, prevAction)
 	kbEv.registerAction(resetEvent, resetAction)
+}
+
+func (kbEv *keyEvents) RegisterMapSwap(
+	evType midi.MidiEventType,
+	channel,
+	key uint8,
+	threshold uint8,
+	namedSets []string,
+) {
+	event := generateNoteEvent(evType, channel, key)
+	kbEv.removeAction(event)
+
+	// The currently active named set.
+	curSet := 0
+
+	// Register the onPress function.
+	action := func(ev midi.MidiEvent) {
+		if ev.Type != midi.EventNoteOn || ev.Velocity <= threshold {
+			return
+		}
+
+		curSet++
+		if curSet >= len(namedSets) {
+			curSet = 0
+		}
+		kbEv.SetNamedSet(namedSets[curSet])
+	}
+
+	kbEv.registerAction(event, action)
 }

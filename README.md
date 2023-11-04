@@ -70,6 +70,46 @@ ch=9 ev=0x30 key=D thres=20 REPEAT 100 10
 # If the MIDI event 48 (i.e., hex 30) is received instead, the sequence moves counter-clockwise.
 # Additionally, MIDI event 38 (i.e., hex 26) can be used to reset back to the initial key (i.e., the up arrow key).
 ch=9 ev=0x2d key=UP thres=20 REPEAT-SEQUENCE 100 10 0x30 0x2b 0x26 str=UP,RIGHT;RIGHT;RIGHT,DOWN;DOWN;DOWN,LEFT;LEFT;LEFT,UP
+
+# If you need to dynamically change between a few sets of mappings,
+# you can create a named set, which will contain every mapping within it.
+# By default, these mappings won't be used, so you must define which set is in use,
+# as well as which MIDI event changes the sets.
+#
+# Note that the USE_MAPPING action should be defined outside of any mapping,
+# otherwise this action could be overwritten in another mapping.
+#
+# Also, if a key is both in a named set and in the default, unnamed set,
+# the action in the default, unnamed set takes precedence.
+
+# Define SET_A as the initially active set,
+# using MIDI event 40 (i.e., hex 28) to advance to the next set in the sequence,
+# separated by commas.
+# Because of how the parser was implemented, a key must be defined.
+# However since this value isn't used, the special name 'NONE'
+# can be used (which doesn't map to any key).
+ch=9 ev=0x28 key=NONE thres=20 USE-MAPPING str=SET_A,SET_B,SET_C
+
+# Create a new mapping set called SET_A,
+# with a Basic action on MIDI event 50 to key 'Z'.
+#
+# Because of how the parser was implemented,
+# every argument must be supplied with some dummy value.
+ch=0 ev=0 key=NONE thres=0 NEW-MAPPING str=SET_A
+
+ch=9 ev=50 key=Z thres=30 BASIC 1000
+
+# Create a new mapping set called SET_B,
+# with a Basic action on MIDI event 50 to key 'X'.
+ch=0 ev=0 key=NONE thres=0 NEW-MAPPING str=SET_B
+
+ch=9 ev=50 key=X thres=30 BASIC 1000
+
+# Create a new mapping set called SET_C,
+# with a Basic action on MIDI event 50 to key 'C'.
+ch=0 ev=0 key=NONE thres=0 NEW-MAPPING str=SET_C
+
+ch=9 ev=50 key=C thres=30 BASIC 1000
 ```
 
 Numbers may be written in any format, as long as they are properly prefixed.

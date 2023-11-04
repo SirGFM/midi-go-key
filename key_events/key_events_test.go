@@ -737,3 +737,171 @@ func TestRepeatSequence(t *testing.T) {
 		}
 	}
 }
+
+func TestSwapNamedSet(t *testing.T) {
+	const evType = midi.EventNoteOn
+	const channel = 1
+	const midiUnnamedKey = 2
+	const midiSwapSet = 3
+	const midiNamedKey = 4
+	const badKey = 5
+	const unnamedKeyCode = 6
+	const namedKeyCodeA = 7
+	const namedKeyCodeB = 8
+	const releaseTime = 10 * time.Millisecond
+	const threshold = 30
+
+	conn := make(chan midi.MidiEvent, 1)
+	defer close(conn)
+	kc := NewMockKeyController(unnamedKeyCode, namedKeyCodeA, namedKeyCodeB)
+	defer kc.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false)
+	assert(t, err == nil, "Failed to start the key event generator")
+	defer ke.Close()
+
+	// Register an event in the unnamed namespace,
+	// activating unnamedKeyCode on midiUnnamedKey,
+	// and the same event in two different namespaces,
+	// one activating namedKeyCodeA (on namespace SET_A),
+	// and the other activating namedKeyCodeB (on namespace SET_B).
+
+	ke.RegisterBasicPressAction(
+		evType,
+		channel,
+		midiUnnamedKey,
+		unnamedKeyCode,
+		threshold,
+		releaseTime,
+	)
+
+	ke.RegisterMapSwap(
+		evType,
+		channel,
+		midiSwapSet,
+		threshold,
+		[]string{"SET_A", "SET_B"},
+	)
+
+	ke.RegisterNamedSet("SET_A")
+
+	ke.RegisterBasicPressAction(
+		evType,
+		channel,
+		midiNamedKey,
+		namedKeyCodeA,
+		threshold,
+		releaseTime,
+	)
+
+	ke.RegisterNamedSet("SET_B")
+
+	ke.RegisterBasicPressAction(
+		evType,
+		channel,
+		midiNamedKey,
+		namedKeyCodeB,
+		threshold,
+		releaseTime,
+	)
+
+	ke.SetNamedSet("SET_A")
+
+	// Test that sending a MIDI event different from the expected doesn't set the keyCode.
+	sendMidiEvent(evType, channel, badKey, 100, conn)
+	select {
+	case <-kc[unnamedKeyCode].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-kc[namedKeyCodeA].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-kc[namedKeyCodeB].newState:
+		t.Fatalf("keyCode was pressed by an invalid MIDI event")
+	case <-time.After(time.Millisecond):
+		// Key wasn't pressed, as expected!
+	}
+
+	// Test that sending the event keeps the keyCode pressed for the desired time.
+	assertKeyEvent(
+		t,
+		kc,
+		unnamedKeyCode,
+		evType,
+		channel,
+		midiUnnamedKey,
+		100,
+		conn,
+		releaseTime,
+		time.Millisecond,
+	)
+
+	// Test that the first named set is active.
+	assertKeyEvent(
+		t,
+		kc,
+		namedKeyCodeA,
+		evType,
+		channel,
+		midiNamedKey,
+		100,
+		conn,
+		releaseTime,
+		time.Millisecond,
+	)
+
+	// Ensure that the second named set (SET_B) wasn't activated.
+	select {
+	case <-kc[namedKeyCodeB].newState:
+		t.Fatalf("keyCode was activated when its namespace should have been inactive")
+	default:
+		// Key wasn't activated, as expected.
+	}
+
+	// Swap and ensure that key B gets activated.
+	sendMidiEvent(evType, channel, midiSwapSet, 100, conn)
+	time.Sleep(time.Millisecond)
+
+	assertKeyEvent(
+		t,
+		kc,
+		namedKeyCodeB,
+		evType,
+		channel,
+		midiNamedKey,
+		100,
+		conn,
+		releaseTime,
+		time.Millisecond,
+	)
+
+	// Ensure that the first named set (SET_A) wasn't activated.
+	select {
+	case <-kc[namedKeyCodeA].newState:
+		t.Fatalf("keyCode was activated when its namespace should have been inactive")
+	default:
+		// Key wasn't activated, as expected.
+	}
+
+	// Swap back and ensure that both key A keys activated,
+	// and the key B doesn't get activated.
+	sendMidiEvent(evType, channel, midiSwapSet, 100, conn)
+	time.Sleep(time.Millisecond)
+
+	assertKeyEvent(
+		t,
+		kc,
+		namedKeyCodeA,
+		evType,
+		channel,
+		midiNamedKey,
+		100,
+		conn,
+		releaseTime,
+		time.Millisecond,
+	)
+	select {
+	case <-kc[namedKeyCodeB].newState:
+		t.Fatalf("keyCode was activated when its namespace should have been inactive")
+	default:
+		// Key wasn't activated, as expected.
+	}
+}

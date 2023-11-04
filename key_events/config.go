@@ -20,6 +20,8 @@ var actionsToArgCount = map[string]int{
 	"TOGGLE":          2,
 	"REPEAT":          2,
 	"REPEAT-SEQUENCE": 6,
+	"USE-MAPPING":     1,
+	"NEW-MAPPING":     1,
 }
 
 // The minimum number of arguments in a line.
@@ -52,6 +54,9 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 		return err_wrap.Wrap(err, ErrOpenConfig)
 	}
 	defer file.Close()
+
+	// The initially active named set.
+	var initialSet string
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -219,6 +224,22 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 				forwardEv,
 				resetEv,
 			)
+		case "USE-MAPPING":
+			sequence := strings.TrimPrefix(args[len(args)-1], "str=")
+			mappings := strings.Split(sequence, ",")
+
+			kbEv.RegisterMapSwap(
+				midi.EventNoteOn,
+				ch,
+				ev,
+				threshold,
+				mappings,
+			)
+
+			initialSet = mappings[0]
+		case "NEW-MAPPING":
+			name := strings.TrimPrefix(args[len(args)-1], "str=")
+			kbEv.RegisterNamedSet(name)
 		default:
 			return ErrConfigActionInvalid
 		}
@@ -227,6 +248,8 @@ func (kbEv *keyEvents) ReadConfig(path string) error {
 	if err := scanner.Err(); err != nil {
 		return err_wrap.Wrap(err, ErrReadFile)
 	}
+
+	kbEv.SetNamedSet(initialSet)
 
 	return nil
 }
