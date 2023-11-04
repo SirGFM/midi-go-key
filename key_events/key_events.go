@@ -225,11 +225,38 @@ func generateNoteEvent(evType midi.MidiEventType, channel, key uint8) noteEvent 
 	return event
 }
 
-// removeAction removes an action associated with the give event, if any.
+// removeAction removes an action associated with the given event, if any.
+// The action is removed from the currently active named set,
+// or from the default, unnamed set if no named set has been activated yet.
 func (kbEv *keyEvents) removeAction(event noteEvent) {
-	if _, ok := kbEv.actions[event]; ok {
-		delete(kbEv.actions, event)
+	set := kbEv.actions
+	if kbEv.curSet != "" {
+		var ok bool
+		set, ok = kbEv.namedSets[kbEv.curSet]
+		if !ok {
+			return
+		}
 	}
+
+	if _, ok := set[event]; ok {
+		delete(set, event)
+	}
+}
+
+// registerAction registers an action to the given event.
+// The action is registered to the currently active named set,
+// or to the default, unnamed set if no named set has been activated yet.
+func (kbEv *keyEvents) registerAction(event noteEvent, action midiAction) {
+	set := kbEv.actions
+	if kbEv.curSet != "" {
+		var ok bool
+		set, ok = kbEv.namedSets[kbEv.curSet]
+		if !ok {
+			return
+		}
+	}
+
+	set[event] = action
 }
 
 // newKeyAction creates a new keyAction, with its timer already configured (but stopped).
@@ -302,7 +329,7 @@ func (kbEv *keyEvents) RegisterBasicPressAction(
 		keyAction.QueueTimedAction(releaseTime)
 	}
 
-	kbEv.actions[event] = action
+	kbEv.registerAction(event, action)
 }
 
 func (kbEv *keyEvents) RegisterVelocityAction(
@@ -357,7 +384,7 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 		}
 	}
 
-	kbEv.actions[event] = action
+	kbEv.registerAction(event, action)
 }
 
 func (kbEv *keyEvents) RegisterToggleAction(
@@ -397,7 +424,7 @@ func (kbEv *keyEvents) RegisterToggleAction(
 		}
 	}
 
-	kbEv.actions[event] = action
+	kbEv.registerAction(event, action)
 }
 
 func (kbEv *keyEvents) RegisterHoldAction(
@@ -441,7 +468,7 @@ func (kbEv *keyEvents) RegisterHoldAction(
 		lastTimestamp = ev.Timestamp
 	}
 
-	kbEv.actions[event] = action
+	kbEv.registerAction(event, action)
 }
 
 func (kbEv *keyEvents) RegisterSequenceHoldAction(
@@ -536,8 +563,8 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 		cur = 0
 	}
 
-	kbEv.actions[pressEvent] = pressAction
-	kbEv.actions[nextEvent] = nextAction
-	kbEv.actions[prevEvent] = prevAction
-	kbEv.actions[resetEvent] = resetAction
+	kbEv.registerAction(pressEvent, pressAction)
+	kbEv.registerAction(nextEvent, nextAction)
+	kbEv.registerAction(prevEvent, prevAction)
+	kbEv.registerAction(resetEvent, resetAction)
 }
