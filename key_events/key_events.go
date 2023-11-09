@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/SirGFM/midi-go-key/event_logger"
 	"github.com/SirGFM/midi-go-key/midi"
 )
 
@@ -164,11 +165,18 @@ type keyEvents struct {
 	timedAction chan timerAction
 	// Whether unhandled events should be logged.
 	logUnhandled bool
+	// The event logger.
+	el event_logger.EventLogger
 }
 
 // NewKeyEvents creates and starts a new event generator.
 // When conn is closed, the key event generator stops running.
-func NewKeyEvents(kc KeyController, conn <-chan midi.MidiEvent, logUnhandled bool) (KeyEvents, error) {
+func NewKeyEvents(
+	kc KeyController,
+	conn <-chan midi.MidiEvent,
+	logUnhandled bool,
+	el event_logger.EventLogger,
+) (KeyEvents, error) {
 	kbEv := &keyEvents{
 		kc:           kc,
 		conn:         conn,
@@ -177,6 +185,7 @@ func NewKeyEvents(kc KeyController, conn <-chan midi.MidiEvent, logUnhandled boo
 		keyActions:   make(map[uint64]*keyAction),
 		timedAction:  make(chan timerAction, timedActionQueueSize),
 		logUnhandled: logUnhandled,
+		el:           el,
 	}
 	go kbEv.run()
 
@@ -295,7 +304,7 @@ func (kbEv *keyEvents) newKeyAction(keyCode int, onTimeout timerAction) *keyActi
 		return action
 	}
 
-	action := newKeyAction(keyCode, kbEv.kc, kbEv.timedAction, onTimeout)
+	action := newKeyAction(keyCode, kbEv.kc, kbEv.timedAction, onTimeout, kbEv.el)
 	kbEv.keyActions[uint64(keyCode)] = action
 	return action
 }
@@ -323,7 +332,7 @@ func (kbEv *keyEvents) newKeyActionMulti(keyCodes []int, onTimeout timerAction) 
 		return action
 	}
 
-	action := newKeyActionMulti(keyCodes, kbEv.kc, kbEv.timedAction, onTimeout)
+	action := newKeyActionMulti(keyCodes, kbEv.kc, kbEv.timedAction, onTimeout, kbEv.el)
 	kbEv.keyActions[code] = action
 	return action
 }

@@ -3,6 +3,8 @@ package key_events
 import (
 	"sync"
 	"time"
+
+	"github.com/SirGFM/midi-go-key/event_logger"
 )
 
 // An action responsible for pressing/releasing a key.
@@ -23,6 +25,8 @@ type keyAction struct {
 	stop chan struct{}
 	// The key's current state.
 	isPressed bool
+	// The event logger.
+	el event_logger.EventLogger
 }
 
 // newKeyAction creates a new keyAction, with its timer already configured (but stopped).
@@ -33,12 +37,14 @@ func newKeyAction(
 	kc KeyController,
 	releaseChannel chan timerAction,
 	onTimeout timerAction,
+	el event_logger.EventLogger,
 ) *keyAction {
 	return newKeyActionMulti(
 		[]int{keyCode},
 		kc,
 		releaseChannel,
 		onTimeout,
+		el,
 	)
 }
 
@@ -51,6 +57,7 @@ func newKeyActionMulti(
 	kc KeyController,
 	releaseChannel chan timerAction,
 	onTimeout timerAction,
+	el event_logger.EventLogger,
 ) *keyAction {
 	action := &keyAction{
 		keyCodes:       keyCodes,
@@ -59,6 +66,7 @@ func newKeyActionMulti(
 		onTimeout:      onTimeout,
 		releaseChannel: releaseChannel,
 		stop:           make(chan struct{}),
+		el:             el,
 	}
 	action.timer.Stop()
 	go action.waitForTimedAction()
@@ -71,10 +79,30 @@ func (key *keyAction) IsPressed() bool {
 	return key.isPressed
 }
 
+// log logs the keyAction's state to the remote logger.
+func (key *keyAction) log(state bool) {
+	var keys []string
+	for _, kc := range key.keyCodes {
+		if kc == -1 {
+			continue
+		}
+
+		name, ok := keyIntToName[kc]
+		if !ok {
+			continue
+		}
+
+		keys = append(keys, name)
+	}
+
+	key.el.SendKeyboardEvent(keys, state)
+}
+
 // Press presses the keyCode.
 func (key *keyAction) Press() {
 	key.isPressed = true
 	key.kc.PressKeys(key.keyCodes...)
+	key.log(true)
 }
 
 // Release the key and pauses its timer.
@@ -87,6 +115,7 @@ func (key *keyAction) Release() {
 func (key *keyAction) release() {
 	key.isPressed = false
 	key.kc.ReleaseKeys(key.keyCodes...)
+	key.log(false)
 	if key.onTimeout != nil {
 		key.onTimeout()
 	}

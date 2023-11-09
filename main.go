@@ -68,7 +68,7 @@ func main() {
 		panic(fmt.Sprintf("%+v", err))
 	}
 
-	kb, err := key_events.NewKeyEvents(kc, conn, *logUnhandled)
+	kb, err := key_events.NewKeyEvents(kc, conn, *logUnhandled, el)
 	if err != nil {
 		panic(fmt.Sprintf("%+v", err))
 	}

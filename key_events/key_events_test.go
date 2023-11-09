@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SirGFM/midi-go-key/event_logger"
 	"github.com/SirGFM/midi-go-key/midi"
 )
 
@@ -184,7 +185,10 @@ func TestBasicPress(t *testing.T) {
 	kc := NewMockKeyController(keyCode)
 	defer kc.Close()
 
-	ke, err := NewKeyEvents(kc, conn, false)
+	el := event_logger.New(nil)
+	defer el.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false, el)
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
@@ -236,7 +240,10 @@ func TestVelocityPress(t *testing.T) {
 	kc := NewMockKeyController(keyCode)
 	defer kc.Close()
 
-	ke, err := NewKeyEvents(kc, conn, false)
+	el := event_logger.New(nil)
+	defer el.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false, el)
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
@@ -304,7 +311,10 @@ func TestHoldPress(t *testing.T) {
 	kc := NewMockKeyController(keyCode)
 	defer kc.Close()
 
-	ke, err := NewKeyEvents(kc, conn, false)
+	el := event_logger.New(nil)
+	defer el.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false, el)
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
@@ -381,7 +391,10 @@ func TestTogglePress(t *testing.T) {
 	kc := NewMockKeyController(keyCode)
 	defer kc.Close()
 
-	ke, err := NewKeyEvents(kc, conn, false)
+	el := event_logger.New(nil)
+	defer el.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false, el)
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
@@ -458,7 +471,10 @@ func TestHoldMultiKeys(t *testing.T) {
 	kc := NewMockKeyController(keyCode)
 	defer kc.Close()
 
-	ke, err := NewKeyEvents(kc, conn, false)
+	el := event_logger.New(nil)
+	defer el.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false, el)
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
@@ -578,7 +594,10 @@ func TestRepeatSequence(t *testing.T) {
 	kc := NewMockKeyController(keys...)
 	defer kc.Close()
 
-	ke, err := NewKeyEvents(kc, conn, false)
+	el := event_logger.New(nil)
+	defer el.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false, el)
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
@@ -756,7 +775,10 @@ func TestSwapNamedSet(t *testing.T) {
 	kc := NewMockKeyController(unnamedKeyCode, namedKeyCodeA, namedKeyCodeB)
 	defer kc.Close()
 
-	ke, err := NewKeyEvents(kc, conn, false)
+	el := event_logger.New(nil)
+	defer el.Close()
+
+	ke, err := NewKeyEvents(kc, conn, false, el)
 	assert(t, err == nil, "Failed to start the key event generator")
 	defer ke.Close()
 
