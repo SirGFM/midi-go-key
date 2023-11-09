@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/SirGFM/midi-go-key/event_logger"
 	"github.com/SirGFM/midi-go-key/key_events"
 	"github.com/SirGFM/midi-go-key/key_events/key_handler"
 	"github.com/SirGFM/midi-go-key/midi"
@@ -22,6 +23,7 @@ func main() {
 	port := flag.Int("port", 0, "the device's port")
 	list := flag.Bool("list", false, "whether the application should list the devices and exit")
 	path := flag.String("config", "./config.txt", "the path to the configuration file")
+	endpoint := flag.String("endpoint", "http://localhost:8080/ram_store/drums", "(optional) the overlay endpoint")
 	logUnhandled := flag.Bool("log-unhandled", false, "whether unhandled events should be logged")
 	flag.Parse()
 
@@ -55,6 +57,9 @@ func main() {
 		logUnhandled = new(bool)
 		*logUnhandled = false
 	}
+
+	el := event_logger.New(endpoint)
+	defer el.Close()
 
 	conn := make(chan midi.MidiEvent, *eventQueueSize)
 
