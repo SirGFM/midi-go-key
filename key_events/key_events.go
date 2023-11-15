@@ -2,6 +2,7 @@ package key_events
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/SirGFM/midi-go-key/event_logger"
@@ -10,6 +11,16 @@ import (
 
 // The action taken (e.g., generate a key press) in response to a MIDI event.
 type midiAction func(midi.MidiEvent)
+
+// The function used to register this MIDI action in the event logger.
+type midiRegister func()
+
+type namedMidiAction struct {
+	// The action taken (e.g., generate a key press) in response to a MIDI event.
+	Action midiAction
+	// The function used to register this MIDI action in the event logger.
+	Register midiRegister
+}
 
 // How many timed actions may be queued at once.
 const timedActionQueueSize = 64
@@ -148,6 +159,8 @@ type timerAction func()
 
 type actionSet map[noteEvent]midiAction
 
+type namedActionSet map[noteEvent]namedMidiAction
+
 type keyEvents struct {
 	// The internal key controller.
 	kc KeyController
@@ -156,7 +169,7 @@ type keyEvents struct {
 	// List actions taken in response to the registered actions.
 	actions actionSet
 	// List of named action sets taken in response to the registered actions.
-	namedSets map[string]actionSet
+	namedSets map[string]namedActionSet
 	// The currently active named action set.
 	curSet string
 	// List actions responsible for pressing/releasing keys.
@@ -181,7 +194,7 @@ func NewKeyEvents(
 		kc:           kc,
 		conn:         conn,
 		actions:      make(map[noteEvent]midiAction),
-		namedSets:    make(map[string]actionSet),
+		namedSets:    make(map[string]namedActionSet),
 		keyActions:   make(map[uint64]*keyAction),
 		timedAction:  make(chan timerAction, timedActionQueueSize),
 		logUnhandled: logUnhandled,
@@ -194,10 +207,13 @@ func NewKeyEvents(
 
 func (kbEv *keyEvents) SetNamedSet(name string) {
 	kbEv.curSet = name
+	for _, action := range kbEv.namedSets[name] {
+		action.Register()
+	}
 }
 
 func (kbEv *keyEvents) RegisterNamedSet(name string) {
-	kbEv.namedSets[name] = make(actionSet)
+	kbEv.namedSets[name] = make(namedActionSet)
 	kbEv.curSet = name
 }
 
@@ -237,9 +253,11 @@ func (kbEv *keyEvents) handleMidiEvent(midiEv midi.MidiEvent) {
 	if !ok {
 		// If the action isn't on the default set,
 		// check if it's in the currently active named set.
-		var set map[noteEvent]midiAction
-		if set, ok = kbEv.namedSets[kbEv.curSet]; ok {
-			action, ok = set[event]
+		if set, found := kbEv.namedSets[kbEv.curSet]; found {
+			if namedAction, found := set[event]; found {
+				action = namedAction.Action
+				ok = true
+			}
 		}
 	}
 
@@ -264,34 +282,43 @@ func generateNoteEvent(evType midi.MidiEventType, channel, key uint8) noteEvent 
 // The action is removed from the currently active named set,
 // or from the default, unnamed set if no named set has been activated yet.
 func (kbEv *keyEvents) removeAction(event noteEvent) {
-	set := kbEv.actions
 	if kbEv.curSet != "" {
-		var ok bool
-		set, ok = kbEv.namedSets[kbEv.curSet]
+		set, ok := kbEv.namedSets[kbEv.curSet]
 		if !ok {
 			return
 		}
-	}
-
-	if _, ok := set[event]; ok {
 		delete(set, event)
+	} else {
+		if _, ok := kbEv.actions[event]; ok {
+			delete(kbEv.actions, event)
+		}
 	}
 }
 
 // registerAction registers an action to the given event.
 // The action is registered to the currently active named set,
 // or to the default, unnamed set if no named set has been activated yet.
-func (kbEv *keyEvents) registerAction(event noteEvent, action midiAction) {
-	set := kbEv.actions
+// If the action is being registered to the default set,
+// the register is immediately sent to the event logger.
+// For named sets, the register function is stored to be called when appropriate.
+func (kbEv *keyEvents) registerAction(
+	event noteEvent,
+	action midiAction,
+	register midiRegister,
+) {
 	if kbEv.curSet != "" {
-		var ok bool
-		set, ok = kbEv.namedSets[kbEv.curSet]
+		set, ok := kbEv.namedSets[kbEv.curSet]
 		if !ok {
 			return
 		}
+		set[event] = namedMidiAction{
+			Action:   action,
+			Register: register,
+		}
+	} else {
+		kbEv.actions[event] = action
+		register()
 	}
-
-	set[event] = action
 }
 
 // newKeyAction creates a new keyAction, with its timer already configured (but stopped).
@@ -365,7 +392,9 @@ func (kbEv *keyEvents) RegisterBasicPressAction(
 		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
-	kbEv.registerAction(event, action)
+	keyboard := keyIntToName[keyCode]
+	register := func() { kbEv.el.SendRegisterEvent(channel, key, keyboard) }
+	kbEv.registerAction(event, action, register)
 }
 
 func (kbEv *keyEvents) RegisterVelocityAction(
@@ -421,7 +450,9 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
-	kbEv.registerAction(event, action)
+	keyboard := keyIntToName[keyCode]
+	register := func() { kbEv.el.SendRegisterEvent(channel, key, keyboard) }
+	kbEv.registerAction(event, action, register)
 }
 
 func (kbEv *keyEvents) RegisterToggleAction(
@@ -462,7 +493,9 @@ func (kbEv *keyEvents) RegisterToggleAction(
 		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
-	kbEv.registerAction(event, action)
+	keyboard := keyIntToName[keyCode]
+	register := func() { kbEv.el.SendRegisterEvent(channel, key, keyboard) }
+	kbEv.registerAction(event, action, register)
 }
 
 func (kbEv *keyEvents) RegisterHoldAction(
@@ -507,7 +540,9 @@ func (kbEv *keyEvents) RegisterHoldAction(
 		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
-	kbEv.registerAction(event, action)
+	keyboard := keyIntToName[keyCode]
+	register := func() { kbEv.el.SendRegisterEvent(channel, key, keyboard) }
+	kbEv.registerAction(event, action, register)
 }
 
 func (kbEv *keyEvents) RegisterSequenceHoldAction(
@@ -534,6 +569,16 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 	resetEvent := generateNoteEvent(evType, channel, resetKeyCode)
 	kbEv.removeAction(resetEvent)
 
+	// Create the list of keys pressed in each step of sequence.
+	var keyNames []string
+	for _, keys := range keyCodes {
+		var names []string
+		for _, keyCode := range keys {
+			names = append(names, keyIntToName[keyCode])
+		}
+		keyNames = append(keyNames, strings.Join(names, ","))
+	}
+
 	// Create a new key handler for each step in the sequence and start their timers.
 	var actions []*keyAction
 	for _, keys := range keyCodes {
@@ -544,6 +589,12 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 
 	// Stores the last time the MIDI event was received.
 	var lastTimestamp int32
+
+	// Update the key logged for the currenct action.
+	registerAction := func() {
+		keyboard := keyNames[cur]
+		kbEv.el.SendRegisterEvent(channel, key, keyboard)
+	}
 
 	// Register the onPress function for activating the current key.
 	pressAction := func(ev midi.MidiEvent) {
@@ -580,6 +631,7 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 		if cur < 0 {
 			cur = len(actions) - 1
 		}
+		registerAction()
 		kbEv.el.SendMIDIEvent(channel, prevKeyCode)
 	}
 
@@ -593,6 +645,8 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 		if cur >= len(actions) {
 			cur = 0
 		}
+
+		registerAction()
 		kbEv.el.SendMIDIEvent(channel, nextKeyCode)
 	}
 
@@ -603,13 +657,20 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 		}
 
 		cur = 0
+		registerAction()
 		kbEv.el.SendMIDIEvent(channel, resetKeyCode)
 	}
 
-	kbEv.registerAction(pressEvent, pressAction)
-	kbEv.registerAction(nextEvent, nextAction)
-	kbEv.registerAction(prevEvent, prevAction)
-	kbEv.registerAction(resetEvent, resetAction)
+	kbEv.registerAction(pressEvent, pressAction, registerAction)
+
+	registerNext := func() { kbEv.el.SendRegisterEvent(channel, nextKeyCode, "NEXT-ACTION") }
+	kbEv.registerAction(nextEvent, nextAction, registerNext)
+
+	registerPrev := func() { kbEv.el.SendRegisterEvent(channel, prevKeyCode, "PREV-ACTION") }
+	kbEv.registerAction(prevEvent, prevAction, registerPrev)
+
+	registerReset := func() { kbEv.el.SendRegisterEvent(channel, resetKeyCode, "RESET-ACTION") }
+	kbEv.registerAction(resetEvent, resetAction, registerReset)
 }
 
 func (kbEv *keyEvents) RegisterMapSwap(
@@ -639,5 +700,6 @@ func (kbEv *keyEvents) RegisterMapSwap(
 		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
-	kbEv.registerAction(event, action)
+	register := func() { kbEv.el.SendRegisterEvent(channel, key, "CHANGE-MODE") }
+	kbEv.registerAction(event, action, register)
 }
