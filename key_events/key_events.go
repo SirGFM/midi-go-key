@@ -362,6 +362,7 @@ func (kbEv *keyEvents) RegisterBasicPressAction(
 		keyAction.Press()
 
 		keyAction.QueueTimedAction(releaseTime)
+		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
 	kbEv.registerAction(event, action)
@@ -417,6 +418,7 @@ func (kbEv *keyEvents) RegisterVelocityAction(
 		} else {
 			onPress()
 		}
+		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
 	kbEv.registerAction(event, action)
@@ -457,6 +459,7 @@ func (kbEv *keyEvents) RegisterToggleAction(
 				keyAction.QueueTimedAction(quickPressDuration)
 			}
 		}
+		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
 	kbEv.registerAction(event, action)
@@ -501,6 +504,7 @@ func (kbEv *keyEvents) RegisterHoldAction(
 		}
 
 		lastTimestamp = ev.Timestamp
+		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
 	kbEv.registerAction(event, action)
@@ -563,6 +567,7 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 		}
 
 		lastTimestamp = ev.Timestamp
+		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
 	// Register the onPress function for going back to the previous input.
@@ -575,6 +580,7 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 		if cur < 0 {
 			cur = len(actions) - 1
 		}
+		kbEv.el.SendMIDIEvent(channel, prevKeyCode)
 	}
 
 	// Register the onPress function for advancing to the next input.
@@ -587,6 +593,7 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 		if cur >= len(actions) {
 			cur = 0
 		}
+		kbEv.el.SendMIDIEvent(channel, nextKeyCode)
 	}
 
 	// Register the onPress function for going to the start of the sequence.
@@ -596,6 +603,7 @@ func (kbEv *keyEvents) RegisterSequenceHoldAction(
 		}
 
 		cur = 0
+		kbEv.el.SendMIDIEvent(channel, resetKeyCode)
 	}
 
 	kbEv.registerAction(pressEvent, pressAction)
@@ -628,6 +636,7 @@ func (kbEv *keyEvents) RegisterMapSwap(
 			curSet = 0
 		}
 		kbEv.SetNamedSet(namedSets[curSet])
+		kbEv.el.SendMIDIEvent(channel, key)
 	}
 
 	kbEv.registerAction(event, action)
