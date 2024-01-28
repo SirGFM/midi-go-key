@@ -1,0 +1,94 @@
+#===============================================================================
+#
+# Momodora: Reverie Under The Moonlight
+#
+#-------------------------------------------------------------------------------
+# Configuration for playing Momodora: RUtM
+# on a C.Ibanez X-Pro Ed100 (Skd230) drum kit.
+#===============================================================================
+
+# kick:      0x24
+# snare:     0x26
+# tom1:      0x30
+# tom2:      0x2d
+# tom3:      0x2b
+# tom4:      0x29
+# hh-pedal:  0x2c
+#     - also generates a bunch of 0x2e with Note Off/velocity 0
+# hh-open:   0x2e
+# hh-closed: 0x2a
+# crash1:    0x31
+# ride:      0x33
+# crash2:    0x39
+
+# ==============================================================================
+# Movement
+# ------------------------------------------------------------------------------
+# REPEAT:
+#
+# arg0 == repeat frame (ms)
+# arg1 == quick release for single press (ms)
+# ------------------------------------------------------------------------------
+# Rolling on these pads will keep the key pressed.
+# Doing a single hit on the pad will do a quick tap on the key instead.
+#
+#  LEFT  - tom1
+#  RIGHT - tom2
+#  UP    - tom3
+#  DOWN  - hi-hat open
+# ------------------------------------------------------------------------------
+ch=9 ev=0x30 key=LEFT thres=25 REPEAT 110 40
+ch=9 ev=0x2b key=RIGHT thres=25 REPEAT 110 40
+ch=9 ev=0x2d key=UP thres=50 REPEAT 100 40
+ch=9 ev=0x2e key=DOWN thres=20 REPEAT 150 40
+ch=9 ev=0x2a key=DOWN thres=20 REPEAT 150 40
+# ==============================================================================
+
+# ==============================================================================
+# Jump - kick
+# ------------------------------------------------------------------------------
+# VELOCITY
+#
+# arg0 == quick release on re-press (ms)
+# arg1 == maximum hold (ms)
+# ------------------------------------------------------------------------------
+# This configuration converts a quiet kick into a shorter jump,
+# and a louder kick into a higher jump.
+# ------------------------------------------------------------------------------
+ch=9 ev=0x24 key=A thres=1 VELOCITY 10 750
+# ==============================================================================
+
+# ==============================================================================
+# Arrow - hi-hat pedal
+# ------------------------------------------------------------------------------
+# TOGGLE
+#
+# arg0 == min velocity (1~128)
+# arg1 == quick release (ms)
+# ------------------------------------------------------------------------------
+# This configuration converts a quiet hi-hat press into firing an arrow,
+# and a loud hi-hat press into toggling the arrow button
+# (so arrows may be charged).
+# ------------------------------------------------------------------------------
+ch=9 ev=0x2c key=D thres=0 TOGGLE 75 10
+# ==============================================================================
+
+# ==============================================================================
+# Regular buttons
+# ------------------------------------------------------------------------------
+# BASIC
+#
+# arg0 == hold time
+# ------------------------------------------------------------------------------
+#  ATTACK -  - tom4
+#  ROLL   -  - snare
+#  ITEM   -  - crash2
+#  SWAP   -  - ride
+#  MENU   -  - crash1
+# ------------------------------------------------------------------------------
+ch=9 ev=0x29 key=S thres=30 BASIC 100
+ch=9 ev=0x26 key=Q thres=30 BASIC 100
+ch=9 ev=0x39 key=W thres=30 BASIC 100
+ch=9 ev=0x33 key=E thres=30 BASIC 100
+ch=9 ev=0x31 key=R thres=30 BASIC 100
+# ==============================================================================

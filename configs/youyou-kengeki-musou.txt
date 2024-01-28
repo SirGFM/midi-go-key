@@ -1,0 +1,81 @@
+#===============================================================================
+#
+# Youyou Kengeki Musou
+#  aka: 妖々剣戟夢想
+#  aka: Enchanting Swordplay Reverie
+#-------------------------------------------------------------------------------
+# Configuration for playing YKM on a C.Ibanez X-Pro Ed100 (Skd230) drum kit.
+#
+# Since this is a 3D game, it has two movement modes:
+#    - Regular 4-way movement:
+#        - each pad is converted to a single directional key
+#    - 8-way tank controls:
+#        - 2 pads rotate the direction
+#        - 1 pad move forward
+#        - 1 pad reset to neutral
+#===============================================================================
+
+# ==============================================================================
+# Regular buttons
+# ------------------------------------------------------------------------------
+#  ATTACK / ACCEPT - crash2
+#  SPELL           - crash1
+#  PAUSE           - hhopen
+#  PAUSE           - hhclose
+#  SWAP            - ride
+#  JUMP            - kick
+#  SKILL           - hhpedal
+# ------------------------------------------------------------------------------
+ch=9 ev=0x39 key=Z thres=30 BASIC 150
+ch=9 ev=0x31 key=C thres=30 BASIC 150
+ch=9 ev=0x2e key=V thres=30 BASIC 150
+ch=9 ev=0x2a key=V thres=30 BASIC 150
+ch=9 ev=0x33 key=S thres=30 BASIC 150
+ch=9 ev=0x24 key=SPACE thres=10 BASIC 150
+ch=9 ev=0x2c key=X thres=0 BASIC 100
+# ==============================================================================
+
+# ==============================================================================
+# Enable different modes
+# ------------------------------------------------------------------------------
+#  SWAP MAPPING - tom4
+# ------------------------------------------------------------------------------
+ch=9 ev=0x29 key=NONE thres=70 USE-MAPPING str=REGULAR_CTRL,TANK_CTRL
+# ==============================================================================
+
+# ==============================================================================
+# Mode 1 - 4-way movement
+# ------------------------------------------------------------------------------
+# Rolling on these pads will keep the key pressed.
+# Doing a single hit on the pad will do a quick tap on the key instead.
+#
+#  LEFT  - tom1
+#  RIGHT - tom3
+#  UP    - tom2
+#  DOWN  - snare
+# ------------------------------------------------------------------------------
+ch=0 ev=0 key=NONE thres=0 NEW-MAPPING str=REGULAR_CTRL
+
+ch=9 ev=0x30 key=LEFT thres=20 REPEAT 100 10
+ch=9 ev=0x2b key=RIGHT thres=20 REPEAT 100 10
+ch=9 ev=0x2d key=UP thres=20 REPEAT 100 10
+ch=9 ev=0x26 key=DOWN thres=20 REPEAT 100 10
+# ==============================================================================
+
+# ==============================================================================
+# Mode 2 - 8-way tank controls
+# ------------------------------------------------------------------------------
+# Rolling on these pads will keep the key pressed.
+# Doing a single hit on the pad will do a quick tap on the key instead.
+#
+# Neutral (i.e., on reset) reverts back to the UP key.
+#
+#  PRESS CURRENT DIRECTION       - tom2
+#  PREVIOUS (COUNTER CLOCKWISE)  - tom1
+#  NEXT (CLOCKWISE)              - tom3
+#  RESET                         - snare
+# ------------------------------------------------------------------------------
+ch=0 ev=0 key=NONE thres=0 NEW-MAPPING str=TANK_CTRL
+
+ch=9 ev=0x2d key=UP thres=20 REPEAT-SEQUENCE 100 10 0x30 0x2b 0x26 str=UP,RIGHT;RIGHT;RIGHT,DOWN;DOWN;DOWN,LEFT;LEFT;LEFT,UP
+# ==============================================================================
